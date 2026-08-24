@@ -44,7 +44,8 @@ if(WIN32)
                             ssb_core/src/win/ssb_encode_win.cpp
                             ssb_core/src/win/ssb_play_win.cpp)
 elseif(UNIX AND NOT APPLE)
-    list(APPEND SSB_SOURCES ssb_core/src/linux/ssb_capture_linux.c)
+    list(APPEND SSB_SOURCES ssb_core/src/linux/ssb_capture_linux.c
+                            ssb_core/src/linux/ssb_play_linux.c)
 else()
     message(FATAL_ERROR "Plataforma no soportada. El alcance es Windows y Linux (docs/01, seccion 6).")
 endif()
@@ -59,7 +60,7 @@ if(WIN32)
 else()
     find_package(Threads REQUIRED)
     find_package(PkgConfig REQUIRED)
-    pkg_check_modules(PULSE REQUIRED libpulse)
+    pkg_check_modules(PULSE REQUIRED libpulse libpulse-simple)
     target_include_directories(ssb_core PRIVATE ${PULSE_INCLUDE_DIRS})
     target_link_libraries(ssb_core PRIVATE Threads::Threads m ${PULSE_LIBRARIES})
     target_link_directories(ssb_core PRIVATE ${PULSE_LIBRARY_DIRS})
@@ -81,6 +82,14 @@ if(nappgui_FOUND AND MSVC)
         message(STATUS "Interfaz: OMITIDA, el SDK solo esta instalado en Debug")
         message(STATUS "          usa -DCMAKE_BUILD_TYPE=Debug, o instala el SDK en Release")
     endif()
+endif()
+
+# En un CI, omitir la interfaz en silencio es lo peor que puede pasar: el job
+# compila solo el motor, pasa en verde y nadie se entera de que la mitad del
+# proyecto no se ha tocado. Con esto puesto, omitirla es un fallo.
+option(SSB_REQUIRE_GUI "Fallar si la interfaz no se puede construir" OFF)
+if(SSB_REQUIRE_GUI AND NOT SSB_GUI_OK)
+    message(FATAL_ERROR "Interfaz: se pidio SSB_REQUIRE_GUI y no se puede construir")
 endif()
 
 if(SSB_GUI_OK)

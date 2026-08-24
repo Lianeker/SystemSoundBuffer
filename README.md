@@ -18,7 +18,7 @@ Two tracks recording at once, nine seconds of the timeline selected.
 | | Windows | Linux |
 |---|---|---|
 | Capture: whole output, one application, input device | WASAPI | PulseAudio |
-| Playback of the selection | yes | not implemented |
+| Playback of the selection | yes | yes |
 | MP3 / AAC export | Media Foundation | not implemented, falls back to WAV |
 | Interface | yes | yes (GTK3) |
 
@@ -88,7 +88,8 @@ cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
 cmake --build build-linux
 ctest --test-dir build-linux
 
-sh probes/linux-captura.sh 25    # records the sink monitor and one application
+sh probes/linux-captura.sh 25       # records the sink monitor and one application
+sh probes/linux-reproduccion.sh     # plays a saved range and listens to the result
 ```
 
 Builds with `/W4 /WX` on MSVC and `-Wall -Wextra -Werror` on gcc.
@@ -117,7 +118,7 @@ directory the executable is launched from. Run it from a directory of its own.
 SystemSoundBuffer/
   ssb_core/    engine: sources, ring buffers, compression, peak map, saving. C, no GUI.
     win/       WASAPI capture, playback, MP3/AAC encoding
-    linux/     PulseAudio capture
+    linux/     PulseAudio capture and playback
                  (macOS out of scope: see docs/01, section 6)
   ssb_gui/     interface with NAppGUI, consumer of ssb_core
     ssbapp.c   window, controls, life cycle
@@ -155,6 +156,7 @@ was based on. Written in Spanish.
 | [20](docs/20-un-microfono-es-mono.md) | Mixing mono and stereo sources |
 | [21](docs/21-el-boton-que-decia-recorc.md) | Button widths across languages; artefact detector thresholds |
 | [22](docs/22-captura-en-linux.md) | PulseAudio capture on Linux; deriving a per-packet timestamp |
+| [23](docs/23-reproduccion-en-linux-y-ci.md) | PulseAudio playback; continuous integration on both platforms |
 
 ## Dependencies
 

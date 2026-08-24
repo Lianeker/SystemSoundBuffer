@@ -1,0 +1,80 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64-msvc
+            os: windows-latest
+          - name: linux-x64-gcc
+            os: ubuntu-latest
+
+    steps:
+      - name: Este repositorio
+        uses: actions/checkout@v4
+        with:
+          path: SystemSoundBuffer
+
+      # La interfaz consume el SDK desde esta bifurcacion, no desde upstream:
+      # lleva correcciones que da por hechas. Ver el README.
+      - name: El SDK NAppGUI
+        uses: actions/checkout@v4
+        with:
+          repository: Lianeker/nappgui-modernize
+          ref: modernize
+          path: nappgui/nappgui_src
+
+      - name: Dependencias de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libpulse-dev \
+            libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
+            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev
+
+      - name: Ninja en Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Entorno MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      # Sin demos ni tests del SDK: aqui solo hace falta el paquete instalado.
+      - name: Compilar e instalar el SDK
+        working-directory: nappgui
+        run: |
+          cmake -S nappgui_src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNAPPGUI_DEMO=NO -DNAPPGUI_TESTS=NO "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/nappgui/install"
+          cmake --build build
+          cmake --install build
+
+      # SSB_REQUIRE_GUI: si el SDK no apareciera, el CMake omite la interfaz con
+      # un mensaje y el job pasaria en verde sin haberla compilado. Con esto es
+      # un fallo.
+      - name: Compilar SystemSoundBuffer
+        working-directory: SystemSoundBuffer
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSSB_REQUIRE_GUI=ON "-DSSB_NAPPGUI_DIR=${{ github.workspace }}/nappgui/install/cmake"
+          cmake --build build
+
+      - name: Tests
+        working-directory: SystemSoundBuffer
+        run: ctest --test-dir build --output-on-failure
+
+      # No hay servidor de sonido en el runner, asi que no se puede grabar. Lo
+      # que si se comprueba es que enumerar no revienta ni se cuelga: es el
+      # camino que toca el sistema de audio nada mas arrancar.
+      - name: Enumerar fuentes
+        working-directory: SystemSoundBuffer
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then ./build/ssb.exe list; else ./build/ssb list; fi
