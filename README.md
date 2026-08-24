@@ -91,6 +91,7 @@ ctest --test-dir build-linux
 
 sh probes/linux-captura.sh 25       # records the sink monitor and one application
 sh probes/linux-reproduccion.sh     # plays a saved range and listens to the result
+sh probes/linux-arranque.sh 25      # starts and closes the interface, counting crashes
 ```
 
 Builds with `/W4 /WX` on MSVC and `-Wall -Wextra -Werror` on gcc.
@@ -158,6 +159,7 @@ was based on. Written in Spanish.
 | [21](docs/21-el-boton-que-decia-recorc.md) | Button widths across languages; artefact detector thresholds |
 | [22](docs/22-captura-en-linux.md) | PulseAudio capture on Linux; deriving a per-packet timestamp |
 | [23](docs/23-reproduccion-en-linux-y-ci.md) | PulseAudio playback; continuous integration on both platforms |
+| [24](docs/24-la-carrera-que-solo-linux-enseno.md) | A startup race in the portable engine, exposed by a faster backend |
 
 ## Dependencies
 

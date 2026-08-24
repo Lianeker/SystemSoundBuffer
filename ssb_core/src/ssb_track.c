@@ -91,6 +91,9 @@ struct ssb_track_t
     double level;
 
     int frozen;
+    /* Hasta que no esta a 1, el callback de captura no toca nada. Ver
+       `ssb_track_create` y la guarda al principio de `i_on_audio`. */
+    int ready;
     int paused;
     ssb_time pause_at; /* se acepta hasta este instante, no mas */
     ssb_time frozen_at;
@@ -272,6 +275,19 @@ static void i_on_audio(void *ctx, const float *pcm, uint32_t frames,
     ssb_track *t = (ssb_track *)ctx;
 
     ssb_mutex_lock(t->mtx);
+    /* La captura empieza a entregar en cuanto se abre, y en `ssb_track_create`
+       la apertura va ANTES de reservar `acc`, el anillo y el mapa de picos: para
+       dimensionarlos hay que saber cuantos canales y a que frecuencia, y quien
+       lo dice es la propia captura. Sin esta guarda, el primer paquete escribe
+       sobre punteros nulos.
+       En Windows no saltaba nunca porque WASAPI tarda mas en dar el primer
+       paquete. El monitor de PulseAudio entrega en milisegundos, y ahi murio:
+       una de cada diez ejecuciones, con SIGSEGV en `i_push_frames`. */
+    if (t->ready == 0)
+    {
+        ssb_mutex_unlock(t->mtx);
+        return;
+    }
     if (t->paused != 0 && tm > t->pause_at)
     {
         /* Entrada detenida: se tira el paquete y el buffer no se mueve. El
@@ -498,6 +514,11 @@ ssb_res ssb_track_create(const char *name, const char *dir, const ssb_source *sr
         ssb_track_destroy(&t);
         return ssb_err_mem;
     }
+
+    /* Ya esta todo en pie: a partir de aqui el callback puede trabajar. */
+    ssb_mutex_lock(t->mtx);
+    t->ready = 1;
+    ssb_mutex_unlock(t->mtx);
 
     *out = t;
     return ssb_ok;
