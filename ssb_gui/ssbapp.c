@@ -1,4 +1,4 @@
-/* SystemSoundBuffer — interfaz.
+﻿/* SystemSoundBuffer â€” interfaz.
  *
  * Consume ssb_core y no sabe nada de WASAPI. El refresco va por `osmain_sync`,
  * que llama a i_update en el HILO DE INTERFAZ a la cadencia pedida; los hilos de
@@ -97,7 +97,7 @@ double app_buffer_secs(App *app)
  * Fue la interseccion hasta que se vio lo que significaba: anadir una pista a
  * mitad de la grabacion hacia desaparecer todo lo anterior a ella. No se podia
  * seleccionar, y cualquier seleccion que ya hubiera pasaba a estar "fuera de lo
- * que cubren todas las pistas" — un mensaje que no apuntaba en absoluto a la
+ * que cubren todas las pistas" â€” un mensaje que no apuntaba en absoluto a la
  * causa.
  *
  * La interseccion existia por una razon real: que al exportar todas las pistas
@@ -1016,6 +1016,46 @@ static void i_OnSepDraw(App *app, Event *e)
     draw_rect(p->ctx, ekFILL, (real32_t)(int32_t)(p->width * .5f), 2, 1, p->height - 4);
 }
 
+/* Los dos botones con icono llevan una holgura EXPLICITA.
+ *
+ * La que pone NAppGUI por omision a un boton plano con icono es medio icono
+ * —aqui 9 px— y no llega: el texto salia cortado. En la captura de portada se
+ * leia "Recorc". Medido subiendo la holgura: con 12 ya entra entero, asi que 20
+ * deja margen de sobra y ademas lo deja con el aire de un boton de barra.
+ *
+ * La holgura por omision se calcula solo con el icono, sin mirar el texto, asi
+ * que un icono pequeno con un rotulo largo siempre va justo. Aqui hay uno de
+ * 18 px al lado de "Reproducir". */
+#define BTN_HPAD 20.f
+
+/* Ancho de un boton que CAMBIA de rotulo.
+ *
+ * Necesitan ancho fijo: sin el, la barra entera se recoloca al pulsarlos y los
+ * de al lado se mueven bajo el raton justo cuando vas a pulsarlos. Pero el
+ * numero no se pone a ojo — se puso, 96 mirando "Record", y en espanol
+ * "Reproducir" no cabia. Se mide el rotulo mas largo de los que ese boton va a
+ * llevar, con la misma cuenta que hace el boton plano. */
+static real32_t i_btn_width(const App *app, const ssb_txt *ids, uint32_t n, const Image *icon)
+{
+    Font *f = font_system(font_regular_size(), 0);
+    real32_t best = 0.f;
+    uint32_t i;
+
+    for (i = 0; i < n; ++i)
+    {
+        real32_t w = 0.f, h = 0.f;
+        font_extents(f, T(app, ids[i]), -1.f, &w, &h);
+        if (w > best)
+            best = w;
+    }
+    font_destroy(&f);
+
+    if (icon != NULL)
+        best += (real32_t)image_width(icon) + 4.f;
+
+    return best + BTN_HPAD;
+}
+
 static Layout *i_toolbar(App *app)
 {
     Layout *layout = layout_create(1, 2);
@@ -1066,13 +1106,15 @@ static Layout *i_toolbar(App *app)
     /* La imagen tambien AQUI, no solo en app_relabel: el tamano del boton se
        calcula al componer el layout, y si en ese momento no hay imagen no se
        reserva sitio para ella. Ponerla despues la dejaba invisible hasta que
-       algo forzara un recalculo — el circulo rojo no salia hasta que pulsabas
+       algo forzara un recalculo â€” el circulo rojo no salia hasta que pulsabas
        Grabar una vez. */
     button_image(app->btn_input, app->ico_rec);
     button_image(app->btn_play, app->ico_play);
     /* Un boton plano usa el texto como etiqueta emergente del icono: para que
        se dibujen LOS DOS hay que decir donde va el icono. */
     button_image_pos(app->btn_input, ekGUI_POS_LEFT);
+    button_hpadding(app->btn_input, BTN_HPAD);
+    button_hpadding(app->btn_play, BTN_HPAD);
     button_image_pos(app->btn_play, ekGUI_POS_LEFT);
     button_text(app->btn_pause, T(app, TXT_FREEZE_VIEW));
     button_text(app->btn_live, T(app, TXT_LIVE));
@@ -1139,7 +1181,7 @@ static Layout *i_toolbar(App *app)
      *
      * Dentro de un grupo, 4 px. A cada lado de una raya, 10.
      *
-     * Fila 0 — QUE se graba y COMO se maneja:
+     * Fila 0 â€” QUE se graba y COMO se maneja:
      *   [fuente] [Anadir] | [Grabar] [Reproducir] .. | [carpeta] | [modos] | [idioma] */
     layout_popup(r0, app->sources, 0, 0);
     layout_button(r0, app->btn_add, 1, 0);
@@ -1159,8 +1201,18 @@ static Layout *i_toolbar(App *app)
     layout_view(r0, app->sep[3], 12, 0);
     layout_button(r0, app->btn_lang, 13, 0);
     layout_hsize(r0, 0, 240);
-    layout_hsize(r0, 3, 96);
-    layout_hsize(r0, 4, 96);
+    {
+        /* Los rotulos que puede llegar a llevar cada uno, no solo el de ahora. */
+        ssb_txt rec[2];
+        ssb_txt play[3];
+        rec[0] = TXT_REC;
+        rec[1] = TXT_STOP_REC;
+        play[0] = TXT_PLAY;
+        play[1] = TXT_PAUSE;
+        play[2] = TXT_RESUME_PLAY;
+        layout_hsize(r0, 3, i_btn_width(app, rec, 2, app->ico_rec));
+        layout_hsize(r0, 4, i_btn_width(app, play, 3, app->ico_play));
+    }
     layout_hsize(r0, 13, 40);
     layout_hexpand(r0, 5);
     layout_hmargin(r0, 0, 4);
@@ -1176,7 +1228,7 @@ static Layout *i_toolbar(App *app)
     layout_hmargin(r0, 11, 10);
     layout_hmargin(r0, 12, 10);
 
-    /* Fila 1 — que se guarda y como se mira:
+    /* Fila 1 â€” que se guarda y como se mira:
          Buffer y calidad | zoom | vista .. | formato | guardado */
     layout_label(r1, app->lbl_buffer, 0, 0);
     layout_popup(r1, app->buffer, 1, 0);
@@ -1198,7 +1250,13 @@ static Layout *i_toolbar(App *app)
     layout_button(r1, app->btn_save, 17, 0);
     layout_hsize(r1, 5, 34);
     layout_hsize(r1, 6, 34);
-    layout_hsize(r1, 16, 108);
+    {
+        ssb_txt mix[2];
+        mix[0] = TXT_MIX_ON;
+        mix[1] = TXT_MIX_OFF;
+        button_hpadding(app->btn_mix, BTN_HPAD);
+        layout_hsize(r1, 16, i_btn_width(app, mix, 2, NULL));
+    }
     layout_hexpand(r1, 11);
     layout_hmargin(r1, 0, 4);
     layout_hmargin(r1, 1, 14);
@@ -1218,7 +1276,7 @@ static Layout *i_toolbar(App *app)
     layout_hmargin(r1, 16, 4);
 
     /* Las rayas: 1 px de ancho y estiradas a lo alto de la fila. Sin el
-       estirado, una etiqueta mide lo que su texto — nada — y no se ve. */
+       estirado, una etiqueta mide lo que su texto â€” nada â€” y no se ve. */
     {
         uint32_t c0[4] = {2, 6, 9, 12};
         uint32_t c1[4] = {4, 7, 12, 15};
@@ -1609,7 +1667,7 @@ static void i_script_load(App *app, const char_t *path)
         char *p = line;
         size_t len;
         /* PowerShell escribe BOM por omision con -Encoding UTF8, y el BOM viaja
-           pegado a la primera orden: `add` llegaba como "ï»¿add" y no
+           pegado a la primera orden: `add` llegaba como "Ã¯Â»Â¿add" y no
            se reconocia. El sintoma era que el primer comando del guion se
            perdia en silencio, que parece cualquier cosa menos un problema de
            codificacion. */

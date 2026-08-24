@@ -1,4 +1,4 @@
-# Mide los artefactos de colocacion: silencio insertado en mitad de la onda.
+﻿# Mide los artefactos de colocacion: silencio insertado en mitad de la onda.
 #
 # Ni una pulsacion simulada. El programa se maneja con --script, que ejecuta las
 # ordenes desde dentro y no depende de que la ventana tenga el foco. Cuatro
@@ -57,3 +57,11 @@ Write-Output '=== exportado ==='
 $got = Get-ChildItem "$dest\*.wav" -EA SilentlyContinue
 if ($got) { $got | ForEach-Object { Write-Output ("  {0,-34} {1,11:N0} bytes" -f $_.Name, $_.Length) } }
 else { Write-Output '  NADA - el guion no llego a guardar' }
+
+# Y la medida, aqui mismo. Antes se hacia a mano con un fragmento de Python que
+# se reescribia cada vez, y un dia se colo con el umbral a 1 frame: marco como
+# interrupcion un cruce por cero de 0.02 ms y me hizo buscar una regresion que
+# no existia. Una medida que se reescribe cada vez no es una medida.
+Write-Output ''
+Write-Output '=== interrupciones ==='
+python (Join-Path $PSScriptRoot 'artefactos.py') $dest

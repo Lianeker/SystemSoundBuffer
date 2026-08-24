@@ -1,75 +1,80 @@
 # SystemSoundBuffer
 
-Grabadora continua de audio con buffer circular y recorte.
+Continuous audio recorder with a ring buffer and trimming.
 
-Graba varias fuentes a la vez, cada una en su pista: la salida completa del
-sistema, aplicaciones concretas (WhatsApp, un navegador, un juego) y dispositivos
-de entrada. Todo va a un buffer circular de duración configurable. Se pausa, se
-selecciona un tramo de la línea de tiempo, se guarda, y la grabación no se corta.
+Records several sources at once, each on its own track: the full system output,
+specific applications (WhatsApp, a browser, a game) and input devices. It all
+goes into a ring buffer of configurable duration. You pause, select a stretch of
+the timeline, save it, and the recording is not interrupted.
 
-## Estado
+![SystemSoundBuffer](docs/img/systemsoundbuffer.png)
 
-**Funciona en Windows, motor e interfaz.** Graba varias fuentes a la vez,
-comprime sin pérdida, mantiene el buffer circular en disco, dibuja las ondas en
-vivo y vuelca a WAV cualquier tramo seleccionado, alineado entre pistas.
+Two tracks recording at once, nine seconds of the timeline selected.
+
+## Status
+
+**Works on Windows, engine and interface.** It records several sources at once,
+compresses losslessly, keeps the ring buffer on disk, draws the waveforms live
+and dumps any selected stretch to WAV, aligned across tracks.
 
 ```
-ssbgui                                      # la interfaz (esto es lo que abres)
-ssbgui --src output --src app:WhatsApp      # arranca con pistas puestas
-ssbgui --theme dark --lang es --export mp3  # tema, idioma y formato de salida
-ssbgui --mode cmd                           # modo comandos (Ctrl+K)
-ssbgui --mode small                         # modo reducido (Ctrl+M)
+ssbgui                                      # the interface (this is what you open)
+ssbgui --src output --src app:WhatsApp      # starts with tracks set
+ssbgui --theme dark --lang es --export mp3  # theme, language and output format
+ssbgui --mode cmd                           # command mode (Ctrl+K)
+ssbgui --mode small                         # reduced mode (Ctrl+M)
 
-ssb list                                    # el motor por linea de comandos (consola)
+ssb list                                    # the engine on the command line (console)
 ssb rec --secs 20 --buffer 300 --src output --src app:WhatsApp --src input
 ssb drift --secs 25 --src output --src app:WhatsApp --csv drift.csv
 ssb encode grabacion.wav grabacion.mp3 192
 ssb selftest
 ```
 
-Pendiente: la captura en Linux. Ver [`docs/`](docs/).
+Outstanding: capture on Linux. See [`docs/`](docs/).
 
-## Compilar
+## Building
 
-La interfaz necesita el SDK **NAppGUI** instalado. Se usa esta bifurcación, que
-lleva correcciones que la interfaz da por hechas —entre ellas el modo oscuro real
-en Windows y el botón plano con texto—:
-<https://github.com/Lianeker/nappgui-modernize> (rama `modernize`).
+The interface needs the **NAppGUI** SDK installed. This fork is the one used,
+which carries fixes the interface takes for granted —among them real dark mode
+on Windows and the flat button with text—:
+<https://github.com/Lianeker/nappgui-modernize> (branch `modernize`).
 
-Se espera en `../nappgui`, junto a este directorio:
+It is expected at `../nappgui`, next to this directory:
 
 ```
 Prog/
-  nappgui/               <- la bifurcacion del SDK, con su install/
-  SystemSoundBuffer/     <- este repositorio
+  nappgui/               <- the SDK fork, with its install/
+  SystemSoundBuffer/     <- this repository
 ```
 
 ```powershell
 . ..\nappgui\tools\env.ps1
 
-# Motor y pruebas, en cualquier configuracion:
+# Engine and tests, in any configuration:
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build
 
-# La interfaz, contra el SDK instalado:
+# The interface, against the installed SDK:
 cmake -S . -B build-dbg -G Ninja -DCMAKE_BUILD_TYPE=Debug
 cmake --build build-dbg
 .\build-dbg\ssbgui.exe
 ```
 
-Si falta el SDK, el CMake omite la interfaz con un mensaje y compila el resto.
-Instalarlo: `cd ..\nappgui` y `.\tools\verify.ps1` (instala Debug). Para
-Release, `cmake -S nappgui_src -B build-rel -G Ninja -DCMAKE_BUILD_TYPE=Release
--DCMAKE_INSTALL_PREFIX=install` y `cmake --install build-rel`.
+If the SDK is missing, CMake skips the interface with a message and builds the
+rest. To install it: `cd ..\nappgui` and `.\tools\verify.ps1` (installs Debug).
+For Release, `cmake -S nappgui_src -B build-rel -G Ninja
+-DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install` and `cmake --install
+build-rel`.
 
-Todo compila con `/W4 /WX`: cero avisos, y los avisos son errores.
+Everything builds with `/W4 /WX`: zero warnings, and warnings are errors.
 
-## Ejecutable suelto
+## Standalone executable
 
-`build\ssbgui.exe` compilado en Release **no necesita nada más**: ni el
-redistribuible de Visual C++ ni ninguna DLL fuera de las que trae Windows. Son
-~600 KB y se copian a donde sea.
+`build\ssbgui.exe` built in Release **needs nothing else**: no Visual C++
+redistributable and no DLL beyond the ones Windows ships. It is ~600 KB and
+copies anywhere.
 
 ```
 > dumpbin /DEPENDENTS ssbgui.exe
@@ -77,77 +82,81 @@ redistribuible de Visual C++ ni ninguna DLL fuera de las que trae Windows. Son
   WS2_32 gdiplus SHLWAPI KERNEL32 USER32 GDI32 SHELL32 COMDLG32 ADVAPI32
 ```
 
-Son dos decisiones del SDK las que lo permiten: se compila con el CRT **estático**
-(`/MT`) y enlaza el cargador **estático** de WebView2. Sin eso harían falta el
-redistribuible y `WebView2Loader.dll` al lado.
+Two SDK decisions are what allow this: it builds with the **static** CRT (`/MT`)
+and links the **static** WebView2 loader. Without that you would need the
+redistributable and `WebView2Loader.dll` alongside.
 
-Un aviso práctico: el buffer circular se crea en `ssb-gui-buffer`, **junto al
-directorio de trabajo desde el que se lanza**. Conviene dejarlo en una carpeta
-propia y no en el escritorio.
+One practical warning: the ring buffer is created in `ssb-gui-buffer`, **next to
+the working directory it is launched from**. It is best to keep it in a folder of
+its own and not on the desktop.
 
-## Disposición prevista
+## Intended layout
 
 ```
 SystemSoundBuffer/
-  ssb_core/    motor: fuentes, ring buffers, compresion, mapa de picos, guardado. C, sin GUI.
-    win/       captura WASAPI          (verificada)
-    linux/     captura PulseAudio/PipeWire (pendiente)
-                 (macOS fuera de alcance: ver docs/01, seccion 6)
-  ssb_gui/     interfaz con NAppGUI, consumidora de ssb_core
-    ssbapp.c   ventana, controles, ciclo de vida
-    ssbwave.c  el lienzo de ondas: dibujo, seleccion, zoom
-  probes/      programas de prueba que sostienen las decisiones de diseño
-  docs/        decisiones, con la evidencia que las respalda
+  ssb_core/    engine: sources, ring buffers, compression, peak map, saving. C, no GUI.
+    win/       WASAPI capture          (verified)
+    linux/     PulseAudio/PipeWire capture (pending)
+                 (macOS out of scope: see docs/01, section 6)
+  ssb_gui/     interface with NAppGUI, consumer of ssb_core
+    ssbapp.c   window, controls, life cycle
+    ssbwave.c  the waveform canvas: drawing, selection, zoom
+  probes/      test programs that hold up the design decisions
+  docs/        decisions, with the evidence that backs them
 ```
 
-## Decisiones
+## Decisions
 
-Cada documento lleva las mediciones que respaldan sus decisiones y los huecos que
-quedan abiertos. Se leen antes de escribir código.
+Each document carries the measurements that back its decisions and the gaps that
+remain open. They are read before writing code.
 
-- [`01-viabilidad-y-decisiones.md`](docs/01-viabilidad-y-decisiones.md) — qué se
-  puede capturar, con qué API, y las nueve decisiones de arquitectura.
-- [`02-motor.md`](docs/02-motor.md) — el motor, los ratios de compresión reales y
-  el defecto del buffer circular.
-- [`03-sincronizacion.md`](docs/03-sincronizacion.md) — por qué la línea de
-  tiempo la marca el reloj y no la cuenta de frames.
-- [`04-interfaz.md`](docs/04-interfaz.md) — la interfaz y lo que se verificó de
-  ella automatizando ratón y teclado.
-- [`05-ajustes.md`](docs/05-ajustes.md) — por qué las pérdidas no se pueden
-  resolver, el defecto que hacía bailar la onda, y el tema de la ventana.
-- [`06-exportacion.md`](docs/06-exportacion.md) — MP3 y AAC con el codificador
-  del sistema, idioma, silenciado de pistas y el aviso de salida muda.
-- [`07-buffer-y-pistas.md`](docs/07-buffer-y-pistas.md) — el final de grabación
-  que se perdía, cambio de buffer en caliente, y botones por pista.
-- [`08-corrupcion-y-vista.md`](docs/08-corrupcion-y-vista.md) — carpetas de pista
-  reutilizadas, descarte que se pasaba de largo, y la vista con una sola regla.
-- [`09-modos.md`](docs/09-modos.md) — la vista pregunta al motor, modo reducido y
-  modo comandos.
+The notes themselves are in Spanish; the descriptions below are not.
+
+- [`01-viabilidad-y-decisiones.md`](docs/01-viabilidad-y-decisiones.md) — what
+  can be captured, with which API, and the nine architecture decisions.
+- [`02-motor.md`](docs/02-motor.md) — the engine, the real compression ratios and
+  the ring buffer defect.
+- [`03-sincronizacion.md`](docs/03-sincronizacion.md) — why the timeline is set
+  by the clock and not by the frame count.
+- [`04-interfaz.md`](docs/04-interfaz.md) — the interface and what was verified
+  of it by automating mouse and keyboard.
+- [`05-ajustes.md`](docs/05-ajustes.md) — why the dropouts cannot be solved, the
+  defect that made the waveform dance, and the window theme.
+- [`06-exportacion.md`](docs/06-exportacion.md) — MP3 and AAC with the system
+  encoder, language, track muting and the silent-output warning.
+- [`07-buffer-y-pistas.md`](docs/07-buffer-y-pistas.md) — the end of the
+  recording that was being lost, changing the buffer on the fly, and per-track
+  buttons.
+- [`08-corrupcion-y-vista.md`](docs/08-corrupcion-y-vista.md) — reused track
+  folders, a discard that went too far, and the view with a single ruler.
+- [`09-modos.md`](docs/09-modos.md) — the view asks the engine, reduced mode and
+  command mode.
 - [`10-el-dialogo-que-movia-el-suelo.md`](docs/10-el-dialogo-que-movia-el-suelo.md)
-  — el diálogo de fichero de Win32 cambia el directorio de trabajo.
-- [`11-chasquidos-y-ajustes.md`](docs/11-chasquidos-y-ajustes.md) — de dónde
-  salían los artefactos y qué ajustes sobreviven al cierre.
-- [`12-el-reloj-que-temblaba.md`](docs/12-el-reloj-que-temblaba.md) — colocar por
-  tiempo o contar frames, y por qué hay que validar el instrumento de medida.
+  — the Win32 file dialog changes the working directory.
+- [`11-chasquidos-y-ajustes.md`](docs/11-chasquidos-y-ajustes.md) — where the
+  artefacts came from and which settings survive shutdown.
+- [`12-el-reloj-que-temblaba.md`](docs/12-el-reloj-que-temblaba.md) — placing by
+  time or counting frames, and why you have to validate the measuring
+  instrument.
 - [`13-calidad-mezcla-y-escucha.md`](docs/13-calidad-mezcla-y-escucha.md) — 24
-  bits, mezcla en un fichero y reproducción de lo seleccionado.
-- [`14-onda-estable-y-que-falta.md`](docs/14-onda-estable-y-que-falta.md) — la
-  onda que cambiaba al desplazarse, y la lista de lo que falta.
+  bits, mixing into one file and playback of the selection.
+- [`14-onda-estable-y-que-falta.md`](docs/14-onda-estable-y-que-falta.md) — the
+  waveform that changed when scrolling, and the list of what is missing.
 - [`15-la-interseccion-y-los-botones.md`](docs/15-la-interseccion-y-los-botones.md)
-  — una pista añadida tarde y los botones por pista.
+  — a track added late and the per-track buttons.
 - [`16-la-union-y-el-peso-de-un-boton.md`](docs/16-la-union-y-el-peso-de-un-boton.md)
-  — arreglar el problema donde está, no donde se ve.
+  — fix the problem where it is, not where it shows.
 - [`17-el-congelamiento-y-la-cabeza-que-saltaba.md`](docs/17-el-congelamiento-y-la-cabeza-que-saltaba.md)
-  — COM en el hilo de interfaz, y el vigilante de dispositivos.
+  — COM on the interface thread, and the device watcher.
 - [`18-el-tema-oscuro-que-nunca-existio.md`](docs/18-el-tema-oscuro-que-nunca-existio.md)
-  — `gui_dark_mode()` mentía en Windows, y los comandos de teclado.
+  — `gui_dark_mode()` was lying on Windows, and the keyboard commands.
 - [`19-la-barra-al-estilo-del-explorador.md`](docs/19-la-barra-al-estilo-del-explorador.md)
-  — botones planos, separadores, y cómo se fotografía un resaltado.
-- [`20-un-microfono-es-mono.md`](docs/20-un-microfono-es-mono.md) — el mezclador
-  se negaba a juntar mono con estéreo, y qué se rompía por debajo.
+  — flat buttons, separators, and how you photograph a highlight.
+- [`20-un-microfono-es-mono.md`](docs/20-un-microfono-es-mono.md) — the mixer
+  refused to join mono with stereo, and what was breaking underneath.
 
-## Dependencias
+## Dependencies
 
-Ninguna externa. La GUI usa el SDK NAppGUI de
-`../nappgui`, consumido con `find_package(nappgui)` desde su prefijo de
-instalación. La captura usa solo APIs del sistema operativo.
+None external. The GUI uses the NAppGUI SDK from `../nappgui`, consumed with
+`find_package(nappgui)` from its install prefix. Capture uses only operating
+system APIs.

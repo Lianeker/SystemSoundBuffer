@@ -14,7 +14,8 @@ ssb-selftest-*/
 *.ssb.log
 *.log
 
-# Audio y capturas, esten donde esten.
+# Audio y capturas, esten donde esten. Las capturas de las sondas llevan audio y
+# pantalla de quien haya ejecutado las pruebas; fuera por omision.
 *.wav
 *.mp3
 *.m4a
@@ -22,6 +23,9 @@ ssb-selftest-*/
 *.png
 *.jpg
 *.csv
+
+# La excepcion: las imagenes de la documentacion, que se eligen a mano.
+!docs/img/*.png
 
 # Restos de herramientas
 *.exe
