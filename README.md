@@ -14,7 +14,16 @@ Two tracks recording at once, nine seconds of the timeline selected.
 - Lossless compression, ring buffer held on disk
 - Live waveforms; export any selected range to WAV, MP3 or AAC, aligned across
   tracks
-- Windows only. Linux capture is not implemented; macOS is out of scope.
+
+| | Windows | Linux |
+|---|---|---|
+| Capture: whole output, one application, input device | WASAPI | PulseAudio |
+| Playback of the selection | yes | not implemented |
+| MP3 / AAC export | Media Foundation | not implemented, falls back to WAV |
+| Interface | yes | yes (GTK3) |
+
+macOS is out of scope: see [`docs/01`](docs/01-viabilidad-y-decisiones.md),
+section 6.
 
 ## Usage
 
@@ -129,6 +138,7 @@ was based on. Written in Spanish.
 | [19](docs/19-la-barra-al-estilo-del-explorador.md) | Flat toolbar buttons and separators |
 | [20](docs/20-un-microfono-es-mono.md) | Mixing mono and stereo sources |
 | [21](docs/21-el-boton-que-decia-recorc.md) | Button widths across languages; artefact detector thresholds |
+| [22](docs/22-captura-en-linux.md) | PulseAudio capture on Linux; deriving a per-packet timestamp |
 
 ## Dependencies
 

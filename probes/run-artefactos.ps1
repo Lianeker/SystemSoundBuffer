@@ -62,6 +62,14 @@ else { Write-Output '  NADA - el guion no llego a guardar' }
 # se reescribia cada vez, y un dia se colo con el umbral a 1 frame: marco como
 # interrupcion un cruce por cero de 0.02 ms y me hizo buscar una regresion que
 # no existia. Una medida que se reescribe cada vez no es una medida.
+# Los huecos que el motor SI vio, al lado de los que encuentra el detector. El
+# motor rellena con silencio los huecos que detecta, asi que el detector los
+# marca tambien: hay que leer las dos lineas juntas. Una interrupcion que no
+# tenga su hueco correspondiente es la que importa.
+Write-Output ''
+Write-Output '=== lo que vio el motor ==='
+Get-Content "$script.log" -EA SilentlyContinue | Select-String -Pattern 'huecos' | ForEach-Object { Write-Output "  $_" }
+
 Write-Output ''
 Write-Output '=== interrupciones ==='
 python (Join-Path $PSScriptRoot 'artefactos.py') $dest
