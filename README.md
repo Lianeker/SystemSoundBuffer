@@ -75,7 +75,23 @@ For Release, `cmake -S nappgui_src -B build-rel -G Ninja
 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install` and `cmake --install
 build-rel`.
 
-Builds with `/W4 /WX`.
+On Linux, `libpulse-dev` is required for the engine and the GTK3 stack for the
+interface:
+
+```sh
+apt install build-essential cmake ninja-build pkg-config libpulse-dev \
+            libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
+            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev
+
+cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DSSB_NAPPGUI_DIR=../nappgui/install-linux/cmake
+cmake --build build-linux
+ctest --test-dir build-linux
+
+sh probes/linux-captura.sh 25    # records the sink monitor and one application
+```
+
+Builds with `/W4 /WX` on MSVC and `-Wall -Wextra -Werror` on gcc.
 
 ## Standalone executable
 
@@ -100,8 +116,8 @@ directory the executable is launched from. Run it from a directory of its own.
 ```
 SystemSoundBuffer/
   ssb_core/    engine: sources, ring buffers, compression, peak map, saving. C, no GUI.
-    win/       WASAPI capture              (implemented)
-    linux/     PulseAudio/PipeWire capture (pending)
+    win/       WASAPI capture, playback, MP3/AAC encoding
+    linux/     PulseAudio capture
                  (macOS out of scope: see docs/01, section 6)
   ssb_gui/     interface with NAppGUI, consumer of ssb_core
     ssbapp.c   window, controls, life cycle
