@@ -11,33 +11,31 @@ the timeline, save it, and the recording is not interrupted.
 
 Two tracks recording at once, nine seconds of the timeline selected.
 
-## Status
+- Lossless compression, ring buffer held on disk
+- Live waveforms; export any selected range to WAV, MP3 or AAC, aligned across
+  tracks
+- Windows only. Linux capture is not implemented; macOS is out of scope.
 
-**Works on Windows, engine and interface.** It records several sources at once,
-compresses losslessly, keeps the ring buffer on disk, draws the waveforms live
-and dumps any selected stretch to WAV, aligned across tracks.
+## Usage
 
 ```
-ssbgui                                      # the interface (this is what you open)
-ssbgui --src output --src app:WhatsApp      # starts with tracks set
-ssbgui --theme dark --lang es --export mp3  # theme, language and output format
+ssbgui                                      # the interface
+ssbgui --src output --src app:WhatsApp      # start with tracks set
+ssbgui --theme dark --lang es --export mp3  # theme, language, output format
 ssbgui --mode cmd                           # command mode (Ctrl+K)
 ssbgui --mode small                         # reduced mode (Ctrl+M)
 
-ssb list                                    # the engine on the command line (console)
+ssb list                                    # the engine, on the command line
 ssb rec --secs 20 --buffer 300 --src output --src app:WhatsApp --src input
 ssb drift --secs 25 --src output --src app:WhatsApp --csv drift.csv
 ssb encode grabacion.wav grabacion.mp3 192
 ssb selftest
 ```
 
-Outstanding: capture on Linux. See [`docs/`](docs/).
-
 ## Building
 
-The interface needs the **NAppGUI** SDK installed. This fork is the one used,
-which carries fixes the interface takes for granted —among them real dark mode
-on Windows and the flat button with text—:
+The interface needs the **NAppGUI** SDK. It builds against this fork, which adds
+Windows dark mode detection and flat buttons with text:
 <https://github.com/Lianeker/nappgui-modernize> (branch `modernize`).
 
 It is expected at `../nappgui`, next to this directory:
@@ -68,13 +66,13 @@ For Release, `cmake -S nappgui_src -B build-rel -G Ninja
 -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=install` and `cmake --install
 build-rel`.
 
-Everything builds with `/W4 /WX`: zero warnings, and warnings are errors.
+Builds with `/W4 /WX`.
 
 ## Standalone executable
 
-`build\ssbgui.exe` built in Release **needs nothing else**: no Visual C++
-redistributable and no DLL beyond the ones Windows ships. It is ~600 KB and
-copies anywhere.
+A Release build of `ssbgui.exe` needs no Visual C++ redistributable and no DLL
+beyond those Windows ships. It is ~600 KB. Prebuilt binaries are on the
+[releases page](../../releases).
 
 ```
 > dumpbin /DEPENDENTS ssbgui.exe
@@ -82,78 +80,55 @@ copies anywhere.
   WS2_32 gdiplus SHLWAPI KERNEL32 USER32 GDI32 SHELL32 COMDLG32 ADVAPI32
 ```
 
-Two SDK decisions are what allow this: it builds with the **static** CRT (`/MT`)
-and links the **static** WebView2 loader. Without that you would need the
-redistributable and `WebView2Loader.dll` alongside.
+This works because the SDK builds with the static CRT (`/MT`) and links the
+static WebView2 loader.
 
-One practical warning: the ring buffer is created in `ssb-gui-buffer`, **next to
-the working directory it is launched from**. It is best to keep it in a folder of
-its own and not on the desktop.
+The ring buffer is created in `ssb-gui-buffer`, relative to the working
+directory the executable is launched from. Run it from a directory of its own.
 
-## Intended layout
+## Layout
 
 ```
 SystemSoundBuffer/
   ssb_core/    engine: sources, ring buffers, compression, peak map, saving. C, no GUI.
-    win/       WASAPI capture          (verified)
+    win/       WASAPI capture              (implemented)
     linux/     PulseAudio/PipeWire capture (pending)
                  (macOS out of scope: see docs/01, section 6)
   ssb_gui/     interface with NAppGUI, consumer of ssb_core
     ssbapp.c   window, controls, life cycle
     ssbwave.c  the waveform canvas: drawing, selection, zoom
-  probes/      test programs that hold up the design decisions
-  docs/        decisions, with the evidence that backs them
+  probes/      test programs used to produce the measurements in docs/
+  docs/        design notes
 ```
 
-## Decisions
+## Design notes
 
-Each document carries the measurements that back its decisions and the gaps that
-remain open. They are read before writing code.
+One document per round of work: what was changed, why, and the measurements it
+was based on. Written in Spanish.
 
-The notes themselves are in Spanish; the descriptions below are not.
-
-- [`01-viabilidad-y-decisiones.md`](docs/01-viabilidad-y-decisiones.md) — what
-  can be captured, with which API, and the nine architecture decisions.
-- [`02-motor.md`](docs/02-motor.md) — the engine, the real compression ratios and
-  the ring buffer defect.
-- [`03-sincronizacion.md`](docs/03-sincronizacion.md) — why the timeline is set
-  by the clock and not by the frame count.
-- [`04-interfaz.md`](docs/04-interfaz.md) — the interface and what was verified
-  of it by automating mouse and keyboard.
-- [`05-ajustes.md`](docs/05-ajustes.md) — why the dropouts cannot be solved, the
-  defect that made the waveform dance, and the window theme.
-- [`06-exportacion.md`](docs/06-exportacion.md) — MP3 and AAC with the system
-  encoder, language, track muting and the silent-output warning.
-- [`07-buffer-y-pistas.md`](docs/07-buffer-y-pistas.md) — the end of the
-  recording that was being lost, changing the buffer on the fly, and per-track
-  buttons.
-- [`08-corrupcion-y-vista.md`](docs/08-corrupcion-y-vista.md) — reused track
-  folders, a discard that went too far, and the view with a single ruler.
-- [`09-modos.md`](docs/09-modos.md) — the view asks the engine, reduced mode and
-  command mode.
-- [`10-el-dialogo-que-movia-el-suelo.md`](docs/10-el-dialogo-que-movia-el-suelo.md)
-  — the Win32 file dialog changes the working directory.
-- [`11-chasquidos-y-ajustes.md`](docs/11-chasquidos-y-ajustes.md) — where the
-  artefacts came from and which settings survive shutdown.
-- [`12-el-reloj-que-temblaba.md`](docs/12-el-reloj-que-temblaba.md) — placing by
-  time or counting frames, and why you have to validate the measuring
-  instrument.
-- [`13-calidad-mezcla-y-escucha.md`](docs/13-calidad-mezcla-y-escucha.md) — 24
-  bits, mixing into one file and playback of the selection.
-- [`14-onda-estable-y-que-falta.md`](docs/14-onda-estable-y-que-falta.md) — the
-  waveform that changed when scrolling, and the list of what is missing.
-- [`15-la-interseccion-y-los-botones.md`](docs/15-la-interseccion-y-los-botones.md)
-  — a track added late and the per-track buttons.
-- [`16-la-union-y-el-peso-de-un-boton.md`](docs/16-la-union-y-el-peso-de-un-boton.md)
-  — fix the problem where it is, not where it shows.
-- [`17-el-congelamiento-y-la-cabeza-que-saltaba.md`](docs/17-el-congelamiento-y-la-cabeza-que-saltaba.md)
-  — COM on the interface thread, and the device watcher.
-- [`18-el-tema-oscuro-que-nunca-existio.md`](docs/18-el-tema-oscuro-que-nunca-existio.md)
-  — `gui_dark_mode()` was lying on Windows, and the keyboard commands.
-- [`19-la-barra-al-estilo-del-explorador.md`](docs/19-la-barra-al-estilo-del-explorador.md)
-  — flat buttons, separators, and how you photograph a highlight.
-- [`20-un-microfono-es-mono.md`](docs/20-un-microfono-es-mono.md) — the mixer
-  refused to join mono with stereo, and what was breaking underneath.
+| | |
+|---|---|
+| [01](docs/01-viabilidad-y-decisiones.md) | Capture APIs per platform; the nine architecture decisions |
+| [02](docs/02-motor.md) | Engine structure, compression ratios, ring buffer |
+| [03](docs/03-sincronizacion.md) | Timeline placement: wall clock vs frame count |
+| [04](docs/04-interfaz.md) | Interface, and how it is tested by automation |
+| [05](docs/05-ajustes.md) | Capture dropouts, waveform stability, window theme |
+| [06](docs/06-exportacion.md) | MP3 and AAC via the system encoder; language; track muting |
+| [07](docs/07-buffer-y-pistas.md) | Buffer resizing while recording; per-track controls |
+| [08](docs/08-corrupcion-y-vista.md) | Track folder reuse; ring discard bounds; the ruler |
+| [09](docs/09-modos.md) | Reduced mode and command mode |
+| [10](docs/10-el-dialogo-que-movia-el-suelo.md) | The Win32 file dialog changes the working directory |
+| [11](docs/11-chasquidos-y-ajustes.md) | Source of the audio artefacts; settings persistence |
+| [12](docs/12-el-reloj-que-temblaba.md) | Clock jitter vs real gaps; measurement method |
+| [13](docs/13-calidad-mezcla-y-escucha.md) | 24-bit storage, mixdown, playback of the selection |
+| [14](docs/14-onda-estable-y-que-falta.md) | Waveform bucketing; open gaps |
+| [15](docs/15-la-interseccion-y-los-botones.md) | Tracks added mid-recording; per-track buttons |
+| [16](docs/16-la-union-y-el-peso-de-un-boton.md) | Selectable span: union vs intersection of tracks |
+| [17](docs/17-el-congelamiento-y-la-cabeza-que-saltaba.md) | COM calls on the UI thread; the device watcher |
+| [18](docs/18-el-tema-oscuro-que-nunca-existio.md) | Dark mode detection on Windows; keyboard shortcuts |
+| [19](docs/19-la-barra-al-estilo-del-explorador.md) | Flat toolbar buttons and separators |
+| [20](docs/20-un-microfono-es-mono.md) | Mixing mono and stereo sources |
+| [21](docs/21-el-boton-que-decia-recorc.md) | Button widths across languages; artefact detector thresholds |
 
 ## Dependencies
 
