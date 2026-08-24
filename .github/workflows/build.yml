@@ -6,8 +6,10 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    name: ${{ matrix.name }}
+  # El motor y la linea de comandos no dependen del SDK, asi que este trabajo
+  # corre siempre y no puede quedarse a medias sin decirlo.
+  motor:
+    name: motor ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -19,19 +21,79 @@ jobs:
             os: ubuntu-latest
 
     steps:
-      - name: Este repositorio
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Dependencias de Linux
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libpulse-dev
+
+      - name: Ninja en Windows
+        if: runner.os == 'Windows'
+        uses: seanmiddleditch/gha-setup-ninja@v5
+
+      - name: Entorno MSVC
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Compilar
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Tests
+        run: ctest --test-dir build --output-on-failure
+
+      # El runner no tiene servidor de sonido, asi que grabar no se puede. Lo que
+      # si se comprueba es que enumerar no revienta ni se cuelga sin servidor:
+      # es el primer camino que toca el sistema de audio al arrancar.
+      - name: Enumerar fuentes
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = "Windows" ]; then ./build/ssb.exe list; else ./build/ssb list; fi
+
+  # La interfaz necesita el SDK, que hoy vive en un repositorio privado. Sin
+  # acceso, este trabajo NO se ejecuta: aparece como omitido, que es informacion.
+  # Compilarlo sin interfaz y darlo por verde no lo seria.
+  #
+  # Para activarlo: hacer publico Lianeker/nappgui-modernize, o dar un token con
+  # acceso de lectura en el secreto NAPPGUI_TOKEN.
+  interfaz:
+    name: interfaz ${{ matrix.name }}
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: windows-x64-msvc
+            os: windows-latest
+          - name: linux-x64-gcc
+            os: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
         with:
           path: SystemSoundBuffer
 
-      # La interfaz consume el SDK desde esta bifurcacion, no desde upstream:
-      # lleva correcciones que da por hechas. Ver el README.
       - name: El SDK NAppGUI
+        id: sdk
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: Lianeker/nappgui-modernize
           ref: modernize
           path: nappgui/nappgui_src
+          token: ${{ secrets.NAPPGUI_TOKEN || github.token }}
+
+      - name: Sin acceso al SDK
+        if: steps.sdk.outcome != 'success'
+        run: |
+          echo "No se ha podido clonar el SDK: el repositorio es privado y no hay"
+          echo "secreto NAPPGUI_TOKEN. La interfaz no se compila en este trabajo."
+          exit 1
 
       - name: Dependencias de Linux
         if: runner.os == 'Linux'
@@ -57,10 +119,10 @@ jobs:
           cmake --build build
           cmake --install build
 
-      # SSB_REQUIRE_GUI: si el SDK no apareciera, el CMake omite la interfaz con
-      # un mensaje y el job pasaria en verde sin haberla compilado. Con esto es
-      # un fallo.
-      - name: Compilar SystemSoundBuffer
+      # SSB_REQUIRE_GUI: find_package(nappgui QUIET) es silencioso. Sin esto, si
+      # el SDK no apareciera, el CMake omitiria la interfaz con un mensaje y el
+      # trabajo pasaria en verde sin haberla compilado.
+      - name: Compilar con interfaz
         working-directory: SystemSoundBuffer
         run: |
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSSB_REQUIRE_GUI=ON "-DSSB_NAPPGUI_DIR=${{ github.workspace }}/nappgui/install/cmake"
@@ -69,12 +131,3 @@ jobs:
       - name: Tests
         working-directory: SystemSoundBuffer
         run: ctest --test-dir build --output-on-failure
-
-      # No hay servidor de sonido en el runner, asi que no se puede grabar. Lo
-      # que si se comprueba es que enumerar no revienta ni se cuelga: es el
-      # camino que toca el sistema de audio nada mas arrancar.
-      - name: Enumerar fuentes
-        working-directory: SystemSoundBuffer
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = "Windows" ]; then ./build/ssb.exe list; else ./build/ssb list; fi

@@ -43,9 +43,11 @@ ssb selftest
 
 ## Building
 
-The interface needs the **NAppGUI** SDK. It builds against this fork, which adds
-Windows dark mode detection and flat buttons with text:
-<https://github.com/Lianeker/nappgui-modernize> (branch `modernize`).
+The engine and the command line build on their own. The interface needs the
+**NAppGUI** SDK, built from a fork that adds Windows dark mode detection and flat
+buttons with text. That fork is currently a private repository, so the interface
+cannot be built from a clean checkout by anyone else; upstream NAppGUI will
+compile but the toolbar and the dark mode will not look as in the screenshot.
 
 It is expected at `../nappgui`, next to this directory:
 
