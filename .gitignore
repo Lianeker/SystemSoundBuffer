@@ -1,0 +1,31 @@
+# Arboles de build. Ademas de objetos, aqui dentro acaban las grabaciones de
+# prueba y las capturas de pantalla de las sondas: audio y pantalla de quien
+# haya ejecutado las pruebas. Fuera del repositorio.
+build/
+build-*/
+dist/
+
+# Buffers circulares en disco y directorios que dejan las autopruebas.
+ssb-gui-buffer/
+ssb-selftest-*/
+
+# Guiones que las sondas generan al vuelo, y sus registros.
+*.ssb
+*.ssb.log
+*.log
+
+# Audio y capturas, esten donde esten.
+*.wav
+*.mp3
+*.m4a
+*.flac
+*.png
+*.jpg
+*.csv
+
+# Restos de herramientas
+*.exe
+*.pdb
+*.obj
+*.ilk
+.vs/
