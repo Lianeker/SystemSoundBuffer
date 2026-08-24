@@ -33,6 +33,19 @@ void ssb_sleep_ms(uint32_t ms);
 typedef void (*ssb_audio_fn)(void *ctx, const float *pcm, uint32_t frames,
                              ssb_time t, int silent, int discontinuity);
 
+/* Parte portable de `ssb_source_parse`.
+ *
+ * Separar "clase:selector" y elegir de lo que devuelve `ssb_enumerate()` es la
+ * misma cuenta en todas partes; lo unico propio de cada sistema es el nombre
+ * legible del dispositivo por omision, que sale de una llamada suya. Estaba
+ * escrito dos veces, una por backend, con el riesgo de que "output:2" acabara
+ * significando cosas distintas segun el sistema.
+ *
+ * `defname` puede ser NULL: entonces el dispositivo por omision se queda con un
+ * nombre generico. */
+typedef void (*ssb_defname_fn)(ssb_src_kind kind, char *out, uint32_t size);
+ssb_res _ssb_source_select(const char *spec, ssb_defname_fn defname, ssb_source *out);
+
 typedef struct ssb_capture_t ssb_capture;
 
 /* Abre la fuente y arranca su hilo. Rellena channels/rate con lo que de verdad

@@ -53,17 +53,10 @@ jobs:
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then ./build/ssb.exe list; else ./build/ssb list; fi
 
-  # La interfaz necesita el SDK, que hoy vive en un repositorio privado. Sin
-  # acceso, este trabajo NO se ejecuta: aparece como omitido, que es informacion.
-  # Compilarlo sin interfaz y darlo por verde no lo seria.
-  #
-  # Para activarlo: hacer publico Lianeker/nappgui-modernize, o dar un token con
-  # acceso de lectura en el secreto NAPPGUI_TOKEN.
+  # La interfaz necesita el SDK, que se clona de su repositorio.
   interfaz:
     name: interfaz ${{ matrix.name }}
-    if: ${{ github.event_name != 'pull_request' }}
     runs-on: ${{ matrix.os }}
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:
@@ -79,21 +72,11 @@ jobs:
           path: SystemSoundBuffer
 
       - name: El SDK NAppGUI
-        id: sdk
-        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: Lianeker/nappgui-modernize
           ref: modernize
           path: nappgui/nappgui_src
-          token: ${{ secrets.NAPPGUI_TOKEN || github.token }}
-
-      - name: Sin acceso al SDK
-        if: steps.sdk.outcome != 'success'
-        run: |
-          echo "No se ha podido clonar el SDK: el repositorio es privado y no hay"
-          echo "secreto NAPPGUI_TOKEN. La interfaz no se compila en este trabajo."
-          exit 1
 
       - name: Dependencias de Linux
         if: runner.os == 'Linux'

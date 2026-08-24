@@ -378,6 +378,151 @@ ssb_res ssb_encode(const char *wav_path, const char *out_path,
 
 #endif
 
+/* ------------------------------------------------- eleccion de fuente
+
+   Ver la explicacion en ssb_internal.h. Cada backend pone lo suyo por encima:
+   Windows resuelve `app:<pid>` sin enumerar, porque alli se puede empezar a
+   captar una aplicacion que todavia no ha hecho ningun ruido. */
+
+static void i_lower(char *s)
+{
+    uint32_t i;
+    for (i = 0; s[i] != 0; ++i)
+    {
+        if (s[i] >= 'A' && s[i] <= 'Z')
+            s[i] = (char)(s[i] - 'A' + 'a');
+    }
+}
+
+static int i_all_digits(const char *s)
+{
+    uint32_t i;
+    if (s[0] == 0)
+        return 0;
+    for (i = 0; s[i] != 0; ++i)
+    {
+        if (s[i] < '0' || s[i] > '9')
+            return 0;
+    }
+    return 1;
+}
+
+static int i_contains(const char *hay, const char *needle)
+{
+    char a[SSB_NAME_MAX], b[SSB_NAME_MAX];
+    snprintf(a, sizeof(a), "%s", hay);
+    snprintf(b, sizeof(b), "%s", needle);
+    i_lower(a);
+    i_lower(b);
+    return (strstr(a, b) != NULL) ? 1 : 0;
+}
+
+ssb_res _ssb_source_select(const char *spec, ssb_defname_fn defname, ssb_source *out)
+{
+    char kind[32];
+    const char *sel;
+    const char *colon;
+    static ssb_source list[SSB_WATCH_MAX];
+    uint32_t n, i, idx = 0, seen = 0;
+    int numeric;
+
+    if (spec == NULL || out == NULL)
+        return ssb_err_arg;
+
+    colon = strchr(spec, ':');
+    if (colon != NULL)
+    {
+        size_t len = (size_t)(colon - spec);
+        if (len >= sizeof(kind))
+            len = sizeof(kind) - 1;
+        memcpy(kind, spec, len);
+        kind[len] = 0;
+        sel = colon + 1;
+    }
+    else
+    {
+        snprintf(kind, sizeof(kind), "%s", spec);
+        sel = "";
+    }
+
+    memset(out, 0, sizeof(*out));
+    if (strcmp(kind, "app") == 0)
+        out->kind = ssb_src_process;
+    else if (strcmp(kind, "output") == 0)
+        out->kind = ssb_src_output_device;
+    else if (strcmp(kind, "input") == 0)
+        out->kind = ssb_src_input_device;
+    else
+        return ssb_err_arg;
+
+    /* El id vacio significa "el que sea el predeterminado", pero el nombre se
+       rellena con el real: la interfaz ensena "Altavoces (Realtek)" en vez de
+       una etiqueta generica, y el motor no inventa texto visible. */
+    if (out->kind != ssb_src_process && (sel[0] == 0 || strcmp(sel, "default") == 0))
+    {
+        out->name[0] = 0;
+        if (defname != NULL)
+            defname(out->kind, out->name, SSB_NAME_MAX);
+        if (out->name[0] == 0)
+        {
+            snprintf(out->name, SSB_NAME_MAX, "%s",
+                     (out->kind == ssb_src_output_device) ? "default output" : "default input");
+        }
+        return ssb_ok;
+    }
+
+    n = ssb_enumerate(list, SSB_WATCH_MAX);
+    if (n > SSB_WATCH_MAX)
+        n = SSB_WATCH_MAX;
+
+    numeric = i_all_digits(sel);
+    if (numeric)
+        idx = (uint32_t)strtoul(sel, NULL, 10);
+
+    for (i = 0; i < n; ++i)
+    {
+        if (list[i].kind != out->kind)
+            continue;
+
+        /* En una aplicacion un numero es un PID: es lo que ensena el sistema y
+           lo que el usuario tiene a mano. En un dispositivo es el indice dentro
+           de su lista, que es lo unico estable que se le puede ensenar. */
+        if (out->kind == ssb_src_process)
+        {
+            if (numeric)
+            {
+                if (list[i].pid == idx)
+                {
+                    *out = list[i];
+                    return ssb_ok;
+                }
+            }
+            else if (i_contains(list[i].name, sel))
+            {
+                *out = list[i];
+                return ssb_ok;
+            }
+            continue;
+        }
+
+        if (numeric)
+        {
+            if (seen == idx)
+            {
+                *out = list[i];
+                return ssb_ok;
+            }
+            seen++;
+        }
+        else if (i_contains(list[i].name, sel))
+        {
+            *out = list[i];
+            return ssb_ok;
+        }
+    }
+    return ssb_err_notfound;
+}
+
 void ssb_sleep(uint32_t ms)
 {
     ssb_sleep_ms(ms);

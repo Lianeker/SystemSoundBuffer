@@ -300,130 +300,82 @@ static uint32_t i_find_process(const char *needle)
     return (nmatch > 0) ? (uint32_t)match[0] : 0;
 }
 
+/* Nombre legible del dispositivo por omision, lo unico de aqui que la parte
+   portable no puede saber. */
+static void i_default_name(ssb_src_kind kind, char *out, uint32_t size)
+{
+    IMMDeviceEnumerator *en = NULL;
+    IMMDevice *dev = NULL;
+    HRESULT co;
+
+    out[0] = 0;
+    if (kind == ssb_src_process)
+        return;
+
+    /* COM en ESTE hilo, y se deshace al salir. Sin esto, el enumerador no se
+       crea y el nombre sale vacio: la interfaz no lo notaba porque para cuando
+       llega aqui ya hay COM montado, pero la linea de comandos ensenaba
+       "default output" en vez del nombre del dispositivo. */
+    co = CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+    en = i_enumerator();
+    if (en == NULL)
+    {
+        if (SUCCEEDED(co))
+            CoUninitialize();
+        return;
+    }
+    if (SUCCEEDED(en->GetDefaultAudioEndpoint(
+            (kind == ssb_src_output_device) ? eRender : eCapture, eConsole, &dev)))
+    {
+        i_device_name(dev, out, size);
+        dev->Release();
+    }
+    en->Release();
+    if (SUCCEEDED(co))
+        CoUninitialize();
+}
+
 extern "C" ssb_res ssb_source_parse(const char *spec, ssb_source *out)
 {
-    char kind[32];
-    const char *sel;
-    const char *colon;
-    ssb_source list[256];
-    uint32_t n, i, idx = 0;
-    int numeric = 1;
-    size_t k;
+    /* Lo unico propio de Windows: `app:<pid>` y `app:<nombre>` se resuelven SIN
+       enumerar sesiones de audio, asi que se puede empezar a captar una
+       aplicacion que todavia no ha hecho ningun ruido. En Linux no hay
+       equivalente: sin sink-input no hay nada a lo que engancharse.
+       El resto de la cuenta es la misma en todas partes y vive en ssb_util.c. */
+    if (spec != NULL && strncmp(spec, "app:", 4) == 0 && spec[4] != 0)
+    {
+        const char *sel = spec + 4;
+        size_t k;
+        int numeric = 1;
 
-    if (spec == NULL || out == NULL)
-        return ssb_err_arg;
-    colon = strchr(spec, ':');
-    if (colon != NULL)
-    {
-        size_t len = (size_t)(colon - spec);
-        if (len >= sizeof(kind))
-            len = sizeof(kind) - 1;
-        memcpy(kind, spec, len);
-        kind[len] = 0;
-        sel = colon + 1;
-    }
-    else
-    {
-        snprintf(kind, sizeof(kind), "%s", spec);
-        sel = "";
-    }
-
-    memset(out, 0, sizeof(*out));
-    if (strcmp(kind, "app") == 0)
-    {
-        out->kind = ssb_src_process;
         for (k = 0; sel[k] != 0; ++k)
+        {
             if (sel[k] < '0' || sel[k] > '9')
                 numeric = 0;
-        if (sel[0] != 0 && numeric)
+        }
+
+        memset(out, 0, sizeof(*out));
+        out->kind = ssb_src_process;
+
+        if (numeric != 0)
         {
             out->pid = (uint32_t)strtoul(sel, NULL, 10);
-            i_proc_name(out->pid, out->name, SSB_NAME_MAX);
-            if (out->name[0] == 0)
-                snprintf(out->name, SSB_NAME_MAX, "pid %u", (unsigned)out->pid);
-            return ssb_ok;
         }
-        out->pid = i_find_process(sel);
-        if (out->pid == 0)
-            return ssb_err_notfound;
+        else
+        {
+            out->pid = i_find_process(sel);
+            if (out->pid == 0)
+                return ssb_err_notfound;
+        }
+
         i_proc_name(out->pid, out->name, SSB_NAME_MAX);
-        return ssb_ok;
-    }
-
-    if (strcmp(kind, "output") == 0)
-        out->kind = ssb_src_output_device;
-    else if (strcmp(kind, "input") == 0)
-        out->kind = ssb_src_input_device;
-    else
-        return ssb_err_arg;
-
-    if (sel[0] == 0 || strcmp(sel, "default") == 0)
-    {
-        /* Se deja el id vacio (que significa "el predeterminado"), pero se copia
-           el nombre real del dispositivo: la interfaz ensena "Speakers (Realtek)"
-           en vez de una etiqueta generica, y el motor no inventa texto visible. */
-        IMMDeviceEnumerator *en = i_enumerator();
-        IMMDevice *dev = NULL;
-        out->name[0] = 0;
-        if (en != NULL)
-        {
-            if (SUCCEEDED(en->GetDefaultAudioEndpoint(
-                    (out->kind == ssb_src_output_device) ? eRender : eCapture, eConsole, &dev)))
-            {
-                i_device_name(dev, out->name, SSB_NAME_MAX);
-                dev->Release();
-            }
-            en->Release();
-        }
         if (out->name[0] == 0)
-            snprintf(out->name, SSB_NAME_MAX, "%s",
-                     (out->kind == ssb_src_output_device) ? "default output" : "default input");
+            snprintf(out->name, SSB_NAME_MAX, "pid %u", (unsigned)out->pid);
         return ssb_ok;
     }
 
-    n = ssb_enumerate(list, 256);
-    if (n > 256)
-        n = 256;
-    for (k = 0; sel[k] != 0; ++k)
-        if (sel[k] < '0' || sel[k] > '9')
-            numeric = 0;
-    if (numeric)
-        idx = (uint32_t)strtoul(sel, NULL, 10);
-
-    {
-        uint32_t seen = 0;
-        for (i = 0; i < n; ++i)
-        {
-            if (list[i].kind != out->kind)
-                continue;
-            if (numeric)
-            {
-                if (seen == idx)
-                {
-                    *out = list[i];
-                    return ssb_ok;
-                }
-                seen++;
-            }
-            else
-            {
-                char a[SSB_NAME_MAX], b[SSB_NAME_MAX];
-                size_t m;
-                snprintf(a, sizeof(a), "%s", list[i].name);
-                snprintf(b, sizeof(b), "%s", sel);
-                for (m = 0; a[m] != 0; ++m)
-                    a[m] = (char)tolower((unsigned char)a[m]);
-                for (m = 0; b[m] != 0; ++m)
-                    b[m] = (char)tolower((unsigned char)b[m]);
-                if (strstr(a, b) != NULL)
-                {
-                    *out = list[i];
-                    return ssb_ok;
-                }
-            }
-        }
-    }
-    return ssb_err_notfound;
+    return _ssb_source_select(spec, i_default_name, out);
 }
 
 extern "C" int ssb_output_muted(const ssb_source *src)

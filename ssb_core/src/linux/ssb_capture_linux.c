@@ -360,34 +360,18 @@ int ssb_output_muted(const ssb_source *src)
 
 /* ------------------------------------------------------------ parseo de spec */
 
-static void i_lower(char *s)
-{
-    size_t i;
-    for (i = 0; s[i] != 0; ++i)
-        s[i] = (char)tolower((unsigned char)s[i]);
-}
-
-static int i_all_digits(const char *s)
-{
-    size_t i;
-    if (s[0] == 0)
-        return 0;
-    for (i = 0; s[i] != 0; ++i)
-        if (s[i] < '0' || s[i] > '9')
-            return 0;
-    return 1;
-}
-
-/* Nombre legible del dispositivo por omision, para no ensenar una etiqueta
-   generica cuando el id va vacio. */
-static void i_default_name(ssb_src_kind kind, char *out, size_t size)
+/* Nombre legible del dispositivo por omision. Es lo unico que la parte portable
+   no puede saber, porque hay que preguntarselo al servidor. */
+static void i_default_name(ssb_src_kind kind, char *out, uint32_t size)
 {
     i_conn conn;
     i_collect co;
-    ssb_source list[SSB_WATCH_MAX];
+    static ssb_source list[SSB_WATCH_MAX];
     uint32_t i;
 
     out[0] = 0;
+    if (kind == ssb_src_process)
+        return;
     if (i_conn_open(&conn) != ssb_ok)
         return;
 
@@ -416,118 +400,7 @@ static void i_default_name(ssb_src_kind kind, char *out, size_t size)
 
 ssb_res ssb_source_parse(const char *spec, ssb_source *out)
 {
-    char kind[32];
-    const char *sel;
-    const char *colon;
-    ssb_source list[SSB_WATCH_MAX];
-    uint32_t n, i, idx = 0, seen = 0;
-    int numeric;
-
-    if (spec == NULL || out == NULL)
-        return ssb_err_arg;
-
-    colon = strchr(spec, ':');
-    if (colon != NULL)
-    {
-        size_t len = (size_t)(colon - spec);
-        if (len >= sizeof(kind))
-            len = sizeof(kind) - 1;
-        memcpy(kind, spec, len);
-        kind[len] = 0;
-        sel = colon + 1;
-    }
-    else
-    {
-        snprintf(kind, sizeof(kind), "%s", spec);
-        sel = "";
-    }
-
-    memset(out, 0, sizeof(*out));
-
-    if (strcmp(kind, "app") == 0)
-        out->kind = ssb_src_process;
-    else if (strcmp(kind, "output") == 0)
-        out->kind = ssb_src_output_device;
-    else if (strcmp(kind, "input") == 0)
-        out->kind = ssb_src_input_device;
-    else
-        return ssb_err_arg;
-
-    if (out->kind != ssb_src_process && (sel[0] == 0 || strcmp(sel, "default") == 0))
-    {
-        i_default_name(out->kind, out->name, SSB_NAME_MAX);
-        if (out->name[0] == 0)
-            snprintf(out->name, SSB_NAME_MAX, "%s",
-                     (out->kind == ssb_src_output_device) ? "default output" : "default input");
-        return ssb_ok;
-    }
-
-    n = ssb_enumerate(list, SSB_WATCH_MAX);
-    if (n > SSB_WATCH_MAX)
-        n = SSB_WATCH_MAX;
-
-    numeric = i_all_digits(sel);
-    if (numeric)
-        idx = (uint32_t)strtoul(sel, NULL, 10);
-
-    for (i = 0; i < n; ++i)
-    {
-        if (list[i].kind != out->kind)
-            continue;
-
-        /* En una aplicacion, un numero es un PID: es lo que ensena el sistema y
-           lo que el usuario tiene a mano. En un dispositivo es el indice dentro
-           de su lista, que es lo unico estable que se le puede ensenar. */
-        if (out->kind == ssb_src_process)
-        {
-            if (numeric)
-            {
-                if (list[i].pid == idx)
-                {
-                    *out = list[i];
-                    return ssb_ok;
-                }
-            }
-            else
-            {
-                char a[SSB_NAME_MAX], b[SSB_NAME_MAX];
-                snprintf(a, sizeof(a), "%s", list[i].name);
-                snprintf(b, sizeof(b), "%s", sel);
-                i_lower(a);
-                i_lower(b);
-                if (strstr(a, b) != NULL)
-                {
-                    *out = list[i];
-                    return ssb_ok;
-                }
-            }
-            continue;
-        }
-
-        if (numeric)
-        {
-            if (seen == idx)
-            {
-                *out = list[i];
-                return ssb_ok;
-            }
-            seen++;
-        }
-        else
-        {
-            char a[SSB_NAME_MAX], b[SSB_NAME_MAX];
-            snprintf(a, sizeof(a), "%s", list[i].name);
-            snprintf(b, sizeof(b), "%s", sel);
-            i_lower(a);
-            i_lower(b);
-            if (strstr(a, b) != NULL)
-            {
-                *out = list[i];
-                return ssb_ok;
-            }
-        }
-    }
-    return ssb_err_notfound;
+    return _ssb_source_select(spec, i_default_name, out);
 }
 
 /* -------------------------------------------------------------------- captura */
