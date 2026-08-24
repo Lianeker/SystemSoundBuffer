@@ -7,13 +7,8 @@
 #include "ssbgui.h"
 #include <stdlib.h>
 #include <stdio.h>
-
-#if defined(_WIN32)
-#include <sewer/nowarn.hxx>
-#include <Windows.h>
-#include <dwmapi.h>
-#include <sewer/warn.hxx>
-#endif
+/* strchr. Antes llegaba de rebote por <Windows.h>, que ya no se incluye. */
+#include <string.h>
 
 /* Tamanos de buffer, en segundos. Los cortos sirven para trabajar comodo: con
    10 s el circular se ve funcionar en diez segundos. */
@@ -47,20 +42,6 @@ static void i_say(App *app, const char_t *text)
             fclose(lg);
         }
     }
-}
-
-/* La barra de titulo la pinta el gestor de ventanas, no el toolkit. En Windows
-   se le pide por DWM; en otras plataformas la decide el escritorio. */
-static void i_dark_titlebar(App *app)
-{
-#if defined(_WIN32)
-    HWND hwnd = (HWND)window_imp(app->window);
-    BOOL dark = (app->theme == 2) ? TRUE : ((app->theme == 1) ? FALSE : (gui_dark_mode() == TRUE ? TRUE : FALSE));
-    if (hwnd != NULL)
-        DwmSetWindowAttribute(hwnd, 20 /* DWMWA_USE_IMMERSIVE_DARK_MODE */, &dark, sizeof(dark));
-#else
-    unref(app);
-#endif
 }
 
 bool_t app_filling(App *app)
@@ -1357,7 +1338,6 @@ void app_apply_chrome(App *app)
                 view_update(app->sep[si]);
         }
     }
-    i_dark_titlebar(app);
     if (app->window != NULL)
         window_update(app->window);
 }
