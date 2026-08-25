@@ -23,6 +23,10 @@ const char_t *T(const App *app, ssb_txt id)
 }
 
 /* Definidas mas abajo; las necesitan funciones que van antes. */
+static void i_play_render(App *app, SsbJob *job);
+static void i_save_all(App *app, const char_t *base, int mixed, SsbJob *job);
+static bool_t i_job_start(App *app, const char_t *base, int mixed, int para_oir);
+static void i_job_collect(App *app);
 static void i_script_load(App *app, const char_t *path);
 
 /* Mensaje efimero, se dibuja en el lienzo y se apaga solo. */
@@ -167,7 +171,14 @@ bool_t app_add_track(App *app, const ssb_source *src)
         return FALSE;
 
     ssb_track_config_default(&cfg);
-    cfg.max_seconds = i_BUFFER_SECS[popup_get_selected(app->buffer) % BUFFER_N];
+    /* De `buffer_secs` y no del desplegable. Un valor a medida —los que solo
+       se alcanzan por orden escrita— no tiene preajuste que marcar, asi que el
+       desplegable se queda donde estaba; leerlo aqui hacia que la pista nueva
+       naciera con el valor viejo. Se veia en el registro: `buffer 20`, y la
+       pista siguiente con 120. */
+    cfg.max_seconds = (uint32_t)(app->buffer_secs + 0.5);
+    if (cfg.max_seconds == 0)
+        cfg.max_seconds = i_BUFFER_SECS[popup_get_selected(app->buffer) % BUFFER_N];
     cfg.max_bytes = 2048ull * 1024ull * 1024ull;
     /* Un solo desplegable para las dos decisiones que van juntas: comprimir o
        no, y con cuanta resolucion. Separarlas en dos controles invitaba a
@@ -492,6 +503,53 @@ void app_play_stop(App *app)
     view_update(app->view);
 }
 
+/* La parte pesada de reproducir: escribe un WAV por pista y los suma. Corre en
+   el hilo del trabajo, asi que aqui no se toca ni un control. */
+static void i_play_render(App *app, SsbJob *job)
+{
+    uint32_t i;
+    static char_t parts[GUI_MAX_TRACKS][620];
+    const char_t *plist[GUI_MAX_TRACKS];
+    uint32_t nparts = 0;
+    double gain = 1.0;
+    char_t uno[620];
+
+    for (i = 0; i < app->ntracks; ++i)
+    {
+        if (app->tracks[i].muted == TRUE)
+            continue;
+        bstd_sprintf(parts[nparts], sizeof(parts[0]), "%s-%u.wav", job->base, i + 1);
+        if (ssb_track_save_wav(app->tracks[i].track, job->a, job->b, parts[nparts]) != ssb_ok)
+            continue;
+        plist[nparts] = parts[nparts];
+        nparts++;
+    }
+    if (nparts == 0)
+    {
+        str_copy_c(job->msg, sizeof(job->msg), T(app, TXT_MSG_OUT_OF_RANGE));
+        return;
+    }
+
+    bstd_sprintf(uno, sizeof(uno), "%s.wav", job->base);
+    {
+        ssb_res mr = ssb_mix_wavs(plist, nparts, uno, &gain);
+        if (mr != ssb_ok)
+        {
+            char_t why[200];
+            for (i = 0; i < nparts; ++i)
+                remove(plist[i]);
+            remove(uno);
+            bstd_sprintf(why, sizeof(why), T(app, TXT_MSG_MIX_FAILED), ssb_res_str(mr));
+            str_copy_c(job->msg, sizeof(job->msg), why);
+            return;
+        }
+    }
+    for (i = 0; i < nparts; ++i)
+        remove(plist[i]);
+
+    str_copy_c(job->salida, sizeof(job->salida), uno);
+}
+
 void app_play_toggle(App *app)
 {
     char_t base[620];
@@ -539,62 +597,13 @@ void app_play_toggle(App *app)
     /* Siempre en un solo fichero, aunque la exportacion este en modo separado:
        reproducir cuatro ficheros a la vez seria otro mezclador, y ya hay uno. */
     bstd_sprintf(base, sizeof(base), "%s/escucha", app->dir);
-    {
-        static char_t parts[GUI_MAX_TRACKS][620];
-        const char_t *plist[GUI_MAX_TRACKS];
-        uint32_t nparts = 0;
-        double gain = 1.0;
-
-        for (i = 0; i < app->ntracks; ++i)
-        {
-            if (app->tracks[i].muted == TRUE)
-                continue;
-            bstd_sprintf(parts[nparts], sizeof(parts[0]), "%s-%u.wav", base, i + 1);
-            if (ssb_track_save_wav(app->tracks[i].track, a, b, parts[nparts]) != ssb_ok)
-                continue;
-            plist[nparts] = parts[nparts];
-            nparts++;
-        }
-        if (nparts == 0)
-        {
-            i_say(app, T(app, TXT_MSG_OUT_OF_RANGE));
-            return;
-        }
-        bstd_sprintf(app->play_file, sizeof(app->play_file), "%s.wav", base);
-        {
-            ssb_res mr = ssb_mix_wavs(plist, nparts, app->play_file, &gain);
-            if (mr != ssb_ok)
-            {
-                char_t why[200];
-                for (i = 0; i < nparts; ++i)
-                    remove(plist[i]);
-                remove(app->play_file);
-                app->play_file[0] = 0;
-                /* Que diga QUE ha pasado. Antes cualquier fallo del mezclador
-                   salia como "esa seleccion cae fuera de lo que cubren todas
-                   las pistas", que no tenia nada que ver y mandaba a buscar el
-                   problema donde no estaba. */
-                bstd_sprintf(why, sizeof(why), T(app, TXT_MSG_MIX_FAILED), ssb_res_str(mr));
-                i_say(app, why);
-                return;
-            }
-        }
-        for (i = 0; i < nparts; ++i)
-            remove(plist[i]);
-    }
 
     /* Se recuerda DONDE empieza lo que va a sonar. La cabeza se dibujara
        respecto a esto, no a la seleccion, que puede cambiar mientras suena. */
     app->play_from = a;
-    if (ssb_play_open(app->play_file, &app->play) != ssb_ok)
-    {
-        remove(app->play_file);
-        app->play_file[0] = 0;
-        i_say(app, T(app, TXT_MSG_PLAY_FAILED));
-        return;
-    }
-    app_relabel(app);
-    view_update(app->view);
+    app->job.a = a;
+    app->job.b = b;
+    i_job_start(app, base, FALSE, TRUE);
 }
 
 /* Exporta el tramo seleccionado.
@@ -602,7 +611,17 @@ void app_play_toggle(App *app)
    NO es un segundo camino de exportacion: se escribe cada pista como siempre y
    luego se suman los WAV. Asi el fichero mezclado no puede sonar distinto de lo
    que sale por separado, que es el error facil de cometer aqui. */
-static void i_save_all(App *app, const char_t *base, int mixed)
+/* Deja el resultado donde toque: en el trabajo si viene de un hilo, o en la
+   propia interfaz si se llamo desde ella. */
+static void i_report(App *app, SsbJob *job, const char_t *text)
+{
+    if (job != NULL)
+        str_copy_c(job->msg, sizeof(job->msg), text);
+    else
+        i_say(app, text);
+}
+
+static void i_save_all(App *app, const char_t *base, int mixed, SsbJob *job)
 {
     ssb_time a, b, wf = 0, wt = 0;
     uint32_t i, saved = 0, active = 0;
@@ -623,7 +642,7 @@ static void i_save_all(App *app, const char_t *base, int mixed)
     }
     if (b <= a)
     {
-        i_say(app, T(app, TXT_MSG_OUT_OF_RANGE));
+        i_report(app, job, T(app, TXT_MSG_OUT_OF_RANGE));
         return;
     }
 
@@ -632,7 +651,7 @@ static void i_save_all(App *app, const char_t *base, int mixed)
             active++;
     if (active == 0)
     {
-        i_say(app, T(app, TXT_MSG_ALL_MUTED));
+        i_report(app, job, T(app, TXT_MSG_ALL_MUTED));
         return;
     }
 
@@ -692,7 +711,7 @@ static void i_save_all(App *app, const char_t *base, int mixed)
             uint32_t k;
             if (nparts == 0)
             {
-                i_say(app, T(app, TXT_MSG_OUT_OF_RANGE));
+                i_report(app, job, T(app, TXT_MSG_OUT_OF_RANGE));
                 return;
             }
             bstd_sprintf(one, sizeof(one), "%s.wav", base);
@@ -715,7 +734,7 @@ static void i_save_all(App *app, const char_t *base, int mixed)
                         bstd_sprintf(msg, sizeof(msg), T(app, TXT_MSG_MIX_FAILED),
                                      ssb_res_str(mr));
                     }
-                    i_say(app, msg);
+                    i_report(app, job, msg);
                     return;
                 }
             }
@@ -734,19 +753,126 @@ static void i_save_all(App *app, const char_t *base, int mixed)
             bstd_sprintf(msg, sizeof(msg), T(app, TXT_MSG_MIXED),
                          nparts, ssb_time_to_sec(b - a), base,
                          fell_back ? "wav" : ssb_format_ext(fmt), gain);
-            i_say(app, msg);
+            i_report(app, job, msg);
             return;
         }
         if (fell_back == TRUE)
         {
             bstd_sprintf(msg, sizeof(msg), T(app, TXT_MSG_ENCODE_FAILED), ssb_format_ext(fmt));
-            i_say(app, msg);
+            i_report(app, job, msg);
             return;
         }
         bstd_sprintf(msg, sizeof(msg), T(app, TXT_MSG_SAVED),
                      saved, active, ssb_time_to_sec(b - a), base, ssb_format_ext(fmt));
-        i_say(app, msg);
+        i_report(app, job, msg);
     }
+}
+
+/* ------------------------------------------------- exportar en un hilo
+
+   La regla: el hilo NO toca la interfaz. Escribe ficheros y deja el resultado en
+   el trabajo; `i_update` lo recoge y ya en el hilo de interfaz muestra el
+   mensaje y, si tocaba, abre la reproduccion. */
+
+int app_busy(const App *app)
+{
+    int v;
+    if (app == NULL || app->job.mtx == NULL)
+        return 0;
+    bmutex_lock(app->job.mtx);
+    v = app->job.activo;
+    bmutex_unlock(app->job.mtx);
+    return v;
+}
+
+static uint32_t i_job_main(App *app)
+{
+    SsbJob *job = &app->job;
+
+    if (job->para_oir != 0)
+        i_play_render(app, job);
+    else
+        i_save_all(app, job->base, job->mixed, job);
+
+    bmutex_lock(job->mtx);
+    job->activo = 0;
+    job->hecho = 1;
+    bmutex_unlock(job->mtx);
+    return 0;
+}
+
+/* Arranca el trabajo. Devuelve FALSE si ya habia uno. */
+static bool_t i_job_start(App *app, const char_t *base, int mixed, int para_oir)
+{
+    SsbJob *job = &app->job;
+
+    if (app_busy(app) != 0)
+    {
+        i_say(app, T(app, TXT_MSG_BUSY));
+        return FALSE;
+    }
+    if (job->th != NULL)
+        bthread_close(&job->th);
+
+    str_copy_c(job->base, sizeof(job->base), base);
+    job->mixed = mixed;
+    job->para_oir = para_oir;
+    job->msg[0] = 0;
+    job->salida[0] = 0;
+    job->hecho = 0;
+    job->activo = 1;
+
+    job->th = bthread_create(i_job_main, app, App);
+    if (job->th == NULL)
+    {
+        job->activo = 0;
+        i_say(app, T(app, TXT_MSG_PLAY_FAILED));
+        return FALSE;
+    }
+    /* Que se note que esta trabajando: si no, un guardado de varios segundos
+       parece que no ha hecho nada. */
+    i_say(app, T(app, TXT_MSG_WORKING));
+    app_relabel(app);
+    return TRUE;
+}
+
+/* Recoge el resultado. Se llama desde `i_update`, o sea en el hilo de interfaz. */
+static void i_job_collect(App *app)
+{
+    SsbJob *job = &app->job;
+    int hecho;
+    char_t msg[260];
+    char_t salida[620];
+    int para_oir;
+
+    if (job->mtx == NULL)
+        return;
+
+    bmutex_lock(job->mtx);
+    hecho = job->hecho;
+    job->hecho = 0;
+    str_copy_c(msg, sizeof(msg), job->msg);
+    str_copy_c(salida, sizeof(salida), job->salida);
+    para_oir = job->para_oir;
+    bmutex_unlock(job->mtx);
+
+    if (hecho == 0)
+        return;
+
+    if (para_oir != 0 && salida[0] != 0)
+    {
+        str_copy_c(app->play_file, sizeof(app->play_file), salida);
+        if (ssb_play_open(app->play_file, &app->play) != ssb_ok)
+        {
+            remove(app->play_file);
+            app->play_file[0] = 0;
+            i_say(app, T(app, TXT_MSG_PLAY_FAILED));
+        }
+    }
+    if (msg[0] != 0)
+        i_say(app, msg);
+    app_relabel(app);
+    view_update(app->view);
 }
 
 static bool_t i_have_selection(App *app)
@@ -817,7 +943,7 @@ static void i_OnSave(App *app, Event *e)
     else
         str_copy_c(base, sizeof(base), path);
     base[sizeof(base) - 1] = 0;
-    i_save_all(app, base, app->mix_export);
+    i_job_start(app, base, app->mix_export, FALSE);
 }
 
 /* Nombre por omision: la fecha y hora reales del principio del tramo
@@ -838,7 +964,7 @@ void app_quick_save(App *app)
         return;
     i_stamp(app, stamp, sizeof(stamp));
     bstd_sprintf(base, sizeof(base), "%s/%s", app->savedir, stamp);
-    i_save_all(app, base, app->mix_export);
+    i_job_start(app, base, app->mix_export, FALSE);
 }
 
 static void i_OnQuickSave(App *app, Event *e)
@@ -1525,8 +1651,15 @@ static void i_read_args(App *app)
         }
         else if (str_equ_c(arg, "--buffer") == TRUE)
         {
+            /* El desplegable y `buffer_secs` tienen que ir juntos: las pistas
+               nuevas leen `buffer_secs`, asi que mover solo el desplegable
+               dejaba la pista con el valor guardado de la sesion anterior. */
             uint32_t idx = (uint32_t)atoi(val);
-            popup_selected(app->buffer, idx < BUFFER_N ? idx : 4);
+            if (idx >= BUFFER_N)
+                idx = 4;
+            popup_selected(app->buffer, idx);
+            app->buffer_secs = (double)i_BUFFER_SECS[idx];
+            app->span_secs = app->buffer_secs;
         }
     }
     for (i = 0; i + 1 < n; ++i)
@@ -1551,6 +1684,7 @@ static App *i_create(void)
 
     app->lang = LANG_EN;
     app->buffer_secs = 300.0;
+    app->job.mtx = bmutex_create();
     app->span_secs = app->buffer_secs;
     app->follow = TRUE;
     app->peaks_cap = 250000;
@@ -1701,6 +1835,7 @@ static void i_update(App *app, const real64_t prtime, const real64_t ctime)
 
     /* Antes que nada, y antes del corte por "no hay pistas": el guion es
        precisamente quien las anade. */
+    i_job_collect(app);
     i_script_step(app, ctime);
 
     /* La reproduccion se cierra sola al llegar al final, para que el boton

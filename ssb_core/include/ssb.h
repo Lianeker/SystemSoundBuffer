@@ -155,6 +155,7 @@ uint64_t ssb_ring_bytes(const ssb_ring *r);
 uint32_t ssb_ring_dropped(const ssb_ring *r);
 uint32_t ssb_ring_bits(const ssb_ring *r);
 ssb_res ssb_ring_set_seconds(ssb_ring *r, uint32_t seconds);
+
 /* Tramo cubierto por el buffer. ssb_err_empty si aun no hay nada. */
 ssb_res ssb_ring_span(const ssb_ring *r, ssb_time *from, ssb_time *to);
 

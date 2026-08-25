@@ -256,7 +256,11 @@ void cmd_run(App *app, const char_t *line)
     else if (str_equ_c(verb, "play") == TRUE)
     {
         app_play_toggle(app);
-        if (app->play == NULL)
+        /* Preparar el audio va en un hilo, asi que al volver de aqui todavia no
+           suena nada. Decir "no hay nada que reproducir" seria mentir. */
+        if (app->play == NULL && app_busy(app) != 0)
+            cmd_print(app, "preparando");
+        else if (app->play == NULL)
             cmd_print(app, "no hay nada que reproducir");
         else
             cmd_print(app, "%s  (%.2f s)",

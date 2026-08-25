@@ -924,6 +924,15 @@ ssb_res ssb_track_save_wav(ssb_track *t, ssb_time from, ssb_time to, const char 
         ssb_mutex_unlock(t->mtx);
         return ssb_err_empty;
     }
+    /* El mutex se mantiene durante toda la escritura, y eso bloquea a la vez
+       la captura y el dibujo: al guardar 140 s, el lienzo pasa de 17 ms a 2478
+       ms por fotograma y aparecen huecos.
+       Se intento soltarlo y aplazar solo el descarte del anillo
+       (`ssb_ring_hold`). No vale: con la captura anadiendo a la vez, el fichero
+       exportado salio a la mitad — 70,49 s de los 135,17 pedidos. El lector
+       necesita mas garantias que "no me muevas el principio". Queda pendiente
+       hacerlo bien, con una prueba que compare duraciones exportadas mientras
+       se graba. */
     res = ssb_ring_save_wav(t->ring, t->channels, t->rate, from, to, path, &filled);
     t->filled_frames += filled;
     ssb_mutex_unlock(t->mtx);

@@ -39,6 +39,32 @@ typedef struct _palette_t
     color_t sep;       /* la raya fina entre grupos de la barra */
 } Palette;
 
+/* Un trabajo de exportacion en curso.
+ *
+ * Exportar —y reproducir, que usa el mismo camino— escribe un WAV por pista y
+ * luego los suma. Con cinco minutos y dos pistas son cientos de MB, y hacerlo
+ * en el hilo de interfaz dejaba la ventana muerta ese rato: al pulsar
+ * Reproducir parecia que no habia pasado nada.
+ *
+ * `activo`, `hecho` y `msg` los escribe el hilo del trabajo y los lee el de
+ * interfaz, siempre bajo `mtx`. Nada de tocar controles desde el hilo: el
+ * mensaje se deja aqui y lo muestra `i_update`. */
+typedef struct _ssbjob_t
+{
+    Mutex *mtx;
+    Thread *th;
+    int activo;    /* el hilo esta trabajando */
+    int hecho;     /* hay resultado que recoger */
+    int para_oir;  /* al terminar hay que abrir la reproduccion */
+    char_t msg[260];
+    char_t salida[620]; /* fichero mezclado, si para_oir */
+    /* Parametros, fijados por el hilo de interfaz antes de arrancar. */
+    char_t base[620];
+    int mixed;
+    ssb_time a;
+    ssb_time b;
+} SsbJob;
+
 typedef struct _gtrack_t
 {
     ssb_track *track;
@@ -87,6 +113,8 @@ typedef struct _app_t
        Son View y no Label: una etiqueta vacia no baja de unos 3 px de ancho y
        la raya salia como un bloque. Un View mide lo que se le dice. */
     View *sep[SEP_N];
+
+    SsbJob job;
     Edit *cmd;
     Layout *bar;      /* las dos filas, para poder ocultar la segunda */
 
@@ -248,6 +276,7 @@ bool_t app_add_track(App *app, const ssb_source *src);
 void app_select_all(App *app);
 void app_select_last(App *app, double secs);
 void app_quick_save(App *app);
+int app_busy(const App *app);
 void app_reload_sources(App *app);
 void app_set_small(App *app, int compact);
 void app_set_cmdmode(App *app, int on);
