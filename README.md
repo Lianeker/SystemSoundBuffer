@@ -160,6 +160,7 @@ was based on. Written in Spanish.
 | [22](docs/22-captura-en-linux.md) | PulseAudio capture on Linux; deriving a per-packet timestamp |
 | [23](docs/23-reproduccion-en-linux-y-ci.md) | PulseAudio playback; continuous integration on both platforms |
 | [24](docs/24-la-carrera-que-solo-linux-enseno.md) | A startup race in the portable engine, exposed by a faster backend |
+| [25](docs/25-el-limite-izquierdo-del-buffer.md) | Enlarging the ring buffer while recording did not enlarge its index |
 
 ## Dependencies
 

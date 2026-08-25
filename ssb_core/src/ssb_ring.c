@@ -322,8 +322,49 @@ ssb_res ssb_ring_append(ssb_ring *r, ssb_time t, const uint8_t *data,
    en el siguiente `append`; ampliar simplemente deja crecer. El indice no se
    reasigna: se dimensiono con holgura y si no llega, la red de seguridad de
    `ssb_ring_append` suelta lo mas viejo antes que pisar nada. */
+/* El indice tiene que caber la nueva duracion.
+ *
+ * Se dimensiona al crear el anillo y antes no se tocaba al cambiar la duracion.
+ * Consecuencia: al AGRANDAR el buffer, el indice se llenaba con la capacidad
+ * vieja y `i_enforce_budget` empezaba a descartar por "indice lleno" — que es un
+ * descarte FORZADO y se salta la regla de no bajar de lo pedido. El buffer se
+ * quedaba clavado donde le permitiera el indice viejo, muy por debajo de lo
+ * pedido, y el borde izquierdo pegaba saltos de un segmento entero.
+ *
+ * Medido: pista creada con 120 s y luego 300 s pedidos -> se quedaba oscilando
+ * entre 123 y 140 s, que es justo lo que caben 1646 bloques.
+ *
+ * Solo crece. Encoger no hace falta y obligaria a decidir que se tira. */
+static ssb_res i_grow_index(ssb_ring *r, uint32_t seconds)
+{
+    uint64_t need64;
+    uint32_t need, i;
+    i_block *ni;
+
+    need64 = ((uint64_t)seconds * r->cfg.rate + 2ull * r->max_segment_frames) / SSB_BLOCK_FRAMES + 64ull;
+    need = (need64 > 0xFFFFFFFFull) ? 0xFFFFFFFFu : (uint32_t)need64;
+    if (need <= r->cap)
+        return ssb_ok;
+
+    ni = (i_block *)calloc(need, sizeof(i_block));
+    if (ni == NULL)
+        return ssb_err_mem;
+
+    /* Se copia en orden logico, asi que el nuevo indice empieza en 0. `i_at`
+       usa head y cap, que todavia son los viejos: no se tocan hasta el final. */
+    for (i = 0; i < r->count; ++i)
+        ni[i] = *i_at(r, i);
+
+    free(r->idx);
+    r->idx = ni;
+    r->cap = need;
+    r->head = 0;
+    return ssb_ok;
+}
+
 ssb_res ssb_ring_set_seconds(ssb_ring *r, uint32_t seconds)
 {
+    ssb_res res;
     if (r == NULL || seconds == 0)
         return ssb_err_arg;
     r->cfg.max_seconds = seconds;
@@ -336,6 +377,9 @@ ssb_res ssb_ring_set_seconds(ssb_ring *r, uint32_t seconds)
         r->max_segment_frames = r->cfg.rate * 30u;
     r->keep = (ssb_time)seconds * SSB_TICKS_PER_SEC +
               (ssb_time)r->max_segment_frames * SSB_TICKS_PER_SEC / (ssb_time)r->cfg.rate;
+    res = i_grow_index(r, seconds);
+    if (res != ssb_ok)
+        return res;
     i_enforce_budget(r);
     return ssb_ok;
 }
