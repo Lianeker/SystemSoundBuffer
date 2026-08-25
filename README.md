@@ -162,6 +162,7 @@ was based on. Written in Spanish.
 | [24](docs/24-la-carrera-que-solo-linux-enseno.md) | A startup race in the portable engine, exposed by a faster backend |
 | [25](docs/25-el-limite-izquierdo-del-buffer.md) | Enlarging the ring buffer while recording did not enlarge its index |
 | [26](docs/26-el-destello-y-el-congelon.md) | Startup flash; export moved to a worker thread, and why the freeze remains |
+| [27](docs/27-lo-escrito-y-lo-que-ocupa.md) | The disk figure counted every block ever written, not what the ring holds |
 
 ## Dependencies
 

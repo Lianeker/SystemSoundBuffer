@@ -215,8 +215,9 @@ static int i_cmd_rec(int argc, char **argv)
             printf("      %u ch a %u Hz, %.2f s capturados\n",
                    (unsigned)st.channels, (unsigned)st.rate,
                    (double)st.frames / (double)(st.rate ? st.rate : 1));
-            printf("      disco %.1f KB de %.1f KB crudos  ->  ratio %.2f:1\n",
-                   (double)st.disk_bytes / 1024.0, (double)st.raw_bytes / 1024.0, st.ratio);
+            printf("      disco %.1f KB ahora (escritos %.1f KB de %.1f KB crudos  ->  ratio %.2f:1)\n",
+                   (double)st.disk_bytes / 1024.0, (double)st.written_bytes / 1024.0,
+                   (double)st.raw_bytes / 1024.0, st.ratio);
             printf("      bloques %u vivos, %u descartados, %u en silencio\n",
                    (unsigned)st.blocks, (unsigned)st.dropped, (unsigned)st.silent_blocks);
             printf("      discontinuidades %u, pico %.4f\n", (unsigned)st.discont, st.peak);
@@ -697,6 +698,11 @@ static int i_cmd_selftest(void)
         i_check(ssb_ring_dropped(r) > 0, "cuenta los bloques descartados");
         i_check(ssb_ring_bytes(r) <= rc.max_bytes + rc.segment_bytes,
                 "se mantiene dentro del presupuesto de bytes");
+        /* Lo vivo no es lo escrito. Se confundieron una vez: la pista sumaba
+           cada bloque codificado y ensenaba ese total como "disco", asi que la
+           cifra subia sin parar aunque el circular estuviera descartando bien. */
+        i_check(ssb_ring_bytes(r) < (uint64_t)blocks_written * (uint64_t)n,
+                "los bytes vivos no son los bytes escritos");
 
         i_check(ssb_ring_span(r, &from, &to) == ssb_ok, "el tramo cubierto es consultable");
         i_check(to > from, "el tramo cubierto no esta vacio");

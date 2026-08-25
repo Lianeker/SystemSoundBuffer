@@ -80,7 +80,10 @@ struct ssb_track_t
     uint32_t drift_count;
 
     uint64_t raw_bytes;
-    uint64_t disk_bytes;
+    /* Comprimido escrito desde que arranco la pista. NO es lo que ocupa el
+       anillo: los bloques descartados siguen contando aqui. Sirve para el
+       ratio de compresion; la ocupacion real la da `ssb_ring_bytes`. */
+    uint64_t enc_bytes;
     uint64_t filled_frames;
     uint32_t silent_blocks;
     uint32_t discont;
@@ -204,7 +207,7 @@ static void i_flush_block(ssb_track *t)
     {
         if (ssb_ring_append(t->ring, bt, t->encbuf, (uint32_t)n, t->acc_frames) == ssb_ok)
         {
-            t->disk_bytes += n;
+            t->enc_bytes += n;
             t->raw_bytes += (uint64_t)t->acc_frames * t->channels * t->sample_bytes;
             if (silent)
                 t->silent_blocks++;
@@ -556,14 +559,15 @@ void ssb_track_stats_get(ssb_track *t, ssb_track_stats *s)
     ssb_mutex_lock(t->mtx);
     s->frames = t->frames;
     s->raw_bytes = t->raw_bytes;
-    s->disk_bytes = t->disk_bytes;
+    s->written_bytes = t->enc_bytes;
+    s->disk_bytes = ssb_ring_bytes(t->ring);
     s->blocks = ssb_ring_blocks(t->ring);
     s->dropped = ssb_ring_dropped(t->ring);
     s->discont = t->discont;
     s->reanchors = t->reanchors;
     s->filled = t->filled_frames;
     s->silent_blocks = t->silent_blocks;
-    s->ratio = (t->disk_bytes > 0) ? (double)t->raw_bytes / (double)t->disk_bytes : 0.0;
+    s->ratio = (t->enc_bytes > 0) ? (double)t->raw_bytes / (double)t->enc_bytes : 0.0;
     s->drift_ms = t->drift_ms;
     s->eff_rate = 0.0;
     if (t->last_reported > t->anchor && t->frames > 0)

@@ -240,8 +240,12 @@ void ssb_track_destroy(ssb_track **t);
 typedef struct
 {
     uint64_t frames;      /* frames capturados */
-    uint64_t raw_bytes;   /* lo que ocuparian sin comprimir */
-    uint64_t disk_bytes;  /* lo que ocupan de verdad */
+    uint64_t raw_bytes;     /* lo que ocuparian sin comprimir, acumulado */
+    uint64_t written_bytes; /* comprimido escrito, acumulado. Con `raw_bytes`
+                               da el ratio de compresion. */
+    uint64_t disk_bytes;    /* lo que ocupan AHORA los segmentos vivos. En un
+                               circular esto se estabiliza; no es lo mismo que
+                               lo escrito, que solo puede subir. */
     uint32_t blocks;      /* bloques vivos en el buffer */
     uint32_t dropped;     /* bloques descartados por el circular */
     uint32_t discont;     /* discontinuidades reportadas por el sistema */
@@ -252,7 +256,7 @@ typedef struct
     uint64_t filled;      /* frames de silencio insertados al exportar, en
                              total, para tapar esos huecos */
     uint32_t silent_blocks;
-    double ratio;         /* raw/disk */
+    double ratio;         /* raw_bytes / written_bytes */
     double drift_ms;      /* reloj del dispositivo contra QPC */
     double eff_rate;      /* frames por segundo de reloj REALES. Si se aleja del
                              nominal, la fuente esta perdiendo frames. */
