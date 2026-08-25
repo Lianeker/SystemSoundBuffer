@@ -1,69 +1,80 @@
-﻿# Cuanto dura el destello blanco al arrancar.
+# Cuanto dura el destello blanco al arrancar.
 #
-#     .\probes\run-arranque-blanco.ps1
+#     .\probes\run-arranque-blanco.ps1 [-Exe ruta] [-Ms 1500]
 #
-# Fotografia la ventana cada pocos milisegundos desde que aparece y mide, en cada
-# toma, que porcentaje del lienzo de ondas sigue siendo blanco. Asi el "tarda un
-# poco en cargar" deja de ser una impresion y pasa a ser un numero.
+# No se puede usar PrintWindow: le pide a la ventana que se dibuje, o sea que
+# fuerza el repintado y el destello desaparece. Se midio asi y salio "0,1 % de
+# blanco desde el primer fotograma", que era mentira.
 #
-# Con PrintWindow, que le pide a la ventana que se dibuje: lo que sale es esta
-# ventana y no lo que hubiera encima.
-param([int]$Tomas = 24, [int]$CadaMs = 120)
+# Aqui se lee el DC de la propia ventana con BitBlt, que copia lo que hay en
+# pantalla sin pedir nada. Se trae la ventana al frente antes, para que lo que
+# se copie sea suyo y no de lo que tenga encima.
+param(
+    [string]$Exe = '',
+    [int]$Ms = 1500,
+    [int]$CadaMs = 25
+)
 $ErrorActionPreference = 'Continue'
-Set-Location (Join-Path $PSScriptRoot '..\build-dbg')
-Remove-Item -Recurse -Force ssb-gui-buffer, arranque -EA SilentlyContinue
-New-Item -ItemType Directory -Force -Path arranque | Out-Null
-# Ruta absoluta: .NET no comparte el directorio actual con PowerShell, asi que
-# una ruta relativa la resuelve contra otro sitio y Save falla con un
-# "error generico en GDI+" que no dice nada.
-$dirTomas = (Resolve-Path arranque).Path
+Set-Location (Join-Path $PSScriptRoot '..')
+if ($Exe -eq '') { $Exe = (Resolve-Path '.\build\ssbgui.exe').Path }
+$trabajo = Join-Path $env:TEMP 'ssb-arranque'
+Remove-Item -Recurse -Force $trabajo -EA SilentlyContinue
+New-Item -ItemType Directory -Force -Path $trabajo | Out-Null
 
-@('wait 30', 'quit') | Set-Content -Path arranque.ssb -Encoding Ascii
+Set-Location (Split-Path $Exe -Parent)
+Remove-Item -Recurse -Force ssb-gui-buffer -EA SilentlyContinue
+@('wait 20', 'quit') | Set-Content -Path arranque.ssb -Encoding Ascii
 
 Add-Type -AssemblyName System.Drawing
 Add-Type @"
 using System;
 using System.Runtime.InteropServices;
-public class AB {
+public class BA {
   [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
-  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr dc, uint f);
-  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr h, out RC r);
+  [DllImport("user32.dll")] public static extern IntPtr GetDC(IntPtr h);
+  [DllImport("user32.dll")] public static extern int ReleaseDC(IntPtr h, IntPtr dc);
+  [DllImport("user32.dll")] public static extern bool GetClientRect(IntPtr h, out RC r);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr h);
+  [DllImport("gdi32.dll")] public static extern bool BitBlt(IntPtr d, int x, int y, int w, int h, IntPtr s, int sx, int sy, int rop);
   [StructLayout(LayoutKind.Sequential)] public struct RC { public int L,T,R,B; }
 }
 "@
-[void][AB]::SetProcessDPIAware()
+[void][BA]::SetProcessDPIAware()
 
 $reloj = [Diagnostics.Stopwatch]::StartNew()
-$gui = Start-Process .\ssbgui.exe -PassThru -ArgumentList @('--lang','en','--script','arranque.ssb')
+$gui = Start-Process $Exe -PassThru -ArgumentList @('--lang','en','--script','arranque.ssb')
 
-# Esperar a que exista ventana, sin dormir de mas: lo que se mide es el arranque.
 $h = [IntPtr]::Zero
-while ($reloj.ElapsedMilliseconds -lt 8000 -and $h -eq [IntPtr]::Zero) {
-    $gui.Refresh()
-    $h = $gui.MainWindowHandle
-    if ($h -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 15 }
+while ($reloj.ElapsedMilliseconds -lt 10000 -and $h -eq [IntPtr]::Zero) {
+    $gui.Refresh(); $h = $gui.MainWindowHandle
 }
 $aparece = $reloj.ElapsedMilliseconds
-Write-Output ("ventana visible a los {0} ms" -f $aparece)
-Write-Output ""
+[void][BA]::SetForegroundWindow($h)
 
-for ($i = 0; $i -lt $Tomas; $i++) {
+$n = 0
+while ($reloj.ElapsedMilliseconds -lt ($aparece + $Ms)) {
     $ms = $reloj.ElapsedMilliseconds
-    $r = New-Object AB+RC
-    [void][AB]::GetWindowRect($h, [ref]$r)
-    $w = $r.R - $r.L; $ht = $r.B - $r.T
-    if ($w -gt 0 -and $ht -gt 0) {
+    $r = New-Object BA+RC
+    if ([BA]::GetClientRect($h, [ref]$r) -and ($r.R - $r.L) -gt 0) {
+        $w = $r.R - $r.L; $ht = $r.B - $r.T
+        $src = [BA]::GetDC($h)
         $b = New-Object System.Drawing.Bitmap $w, $ht
         $g = [System.Drawing.Graphics]::FromImage($b)
-        $hdc = $g.GetHdc()
-        [void][AB]::PrintWindow($h, $hdc, 2)
-        $g.ReleaseHdc($hdc); $g.Dispose()
-        $b.Save((Join-Path $dirTomas ("t{0:0000}.png" -f $ms)), [System.Drawing.Imaging.ImageFormat]::Png)
+        $dst = $g.GetHdc()
+        [void][BA]::BitBlt($dst, 0, 0, $w, $ht, $src, 0, 0, 0x00CC0020)  # SRCCOPY
+        $g.ReleaseHdc($dst); $g.Dispose()
+        [void][BA]::ReleaseDC($h, $src)
+        $b.Save((Join-Path $trabajo ("t{0:0000}.png" -f $ms)), [System.Drawing.Imaging.ImageFormat]::Png)
         $b.Dispose()
+        $n++
     }
     Start-Sleep -Milliseconds $CadaMs
 }
 Stop-Process -Id $gui.Id -Force -EA SilentlyContinue
 
-# El analisis, en Python: contar blanco es mas claro ahi que en PowerShell.
-python (Join-Path $PSScriptRoot 'arranque.py') $dirTomas
+Write-Output ("ventana a los {0} ms; {1} tomas" -f $aparece, $n)
+Write-Output ""
+python (Join-Path $PSScriptRoot 'arranque.py') $trabajo
+
+# Las tomas se borran: son de la pantalla, y de la pantalla no se guarda nada.
+Remove-Item -Recurse -Force $trabajo -EA SilentlyContinue

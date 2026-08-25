@@ -1,44 +1,85 @@
 # 26 — El destello al arrancar, y el congelón al exportar
 
-Dos cosas que se ven al usar el programa. Una está arreglada; la otra, medida y
-no.
+Dos cosas que se ven al usar el programa. La primera costo tres mediciones y
+dos hipotesis falsas; la segunda esta medida y sin arreglar.
 
 ## El destello blanco
 
-Al abrir, durante un instante se ve el lienzo y los botones en blanco sobre la
-ventana ya oscura. Son dos defectos del SDK, y el segundo llevaba ahí desde
-siempre.
+Al abrir, durante medio segundo se ven el lienzo y los botones en blanco sobre
+la ventana ya oscura.
 
-`nappgui_src/src/osgui/win/osgui_win.cpp`, al registrar la clase de la ventana:
+### La primera respuesta fue falsa
 
-```c
-#if defined(__x64__)
-    wc.hbrBackground = (HBRUSH)(uint64_t)(COLOR_BTNFACE);
-#else
-    wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
-#endif
+Parecía la brocha de fondo de la clase de ventana del SDK, que además tenía un
+defecto de verdad: en `WNDCLASSEX` un color de sistema se pasa como
+`COLOR_X + 1`, y la rama de x64 se había dejado el `+ 1`, así que pasaba el
+color 14, `COLOR_BTNHIGHLIGHT`, **blanco**. Se corrigió — es `NAP-048` — y el
+destello **siguió igual**.
+
+Lo que lo demostró: registrar las tres clases con una brocha **roja** y medir el
+arranque leyendo el DC de la ventana con `BitBlt` cada 30 ms.
+
+```
+  581 ms   blanco 56,0 %   rojo 0,0 %
+  919 ms   blanco 54,0 %   rojo 0,0 %
+  997 ms   blanco  1,7 %   rojo 0,0 %
 ```
 
-En `WNDCLASSEX` un color de sistema se pasa como **`COLOR_X + 1`**, porque el 0
-significa «sin brocha». La rama de x86 lo hace bien; la de x64 se dejó el `+ 1`
-al añadir el cast que silencia el aviso C4306. Con `COLOR_BTNFACE` = 15, pasar
-15 significa color **14**, que es `COLOR_BTNHIGHLIGHT`: **blanco**. O sea que en
-x64 el fondo de toda ventana era blanco en vez del gris de botón.
+Cero rojo. No era la brocha.
 
-Y aunque fuera gris, en oscuro también destellaría. Así que las tres clases
-propias del SDK se registran ahora con la brocha oscura cuando el sistema lo
-está. `_osdark_start()` ya corre antes de los registros, así que ahí se sabe.
+Segundo experimento: teñir de rojo el relleno del botón plano y de verde el del
+lienzo.
 
-Lo que Windows pinta antes del primer `WM_PAINT` pasa a ser del color del fondo
-definitivo, y el destello deja de verse aunque siga existiendo.
+```
+  542 ms   blanco 56,3   rojo 0,0   verde  0,0
+  828 ms   blanco 54,0   rojo 0,0   verde  0,0
+  906 ms   blanco  1,7   rojo 2,2   verde 49,9
+```
 
-Comprobado leyendo `GCLP_HBRBACKGROUND` de la ventana: devuelve un objeto GDI de
-verdad y no un índice pequeño de color de sistema, que es lo que devolvía antes.
+Ni rojo ni verde durante el destello, y los dos de golpe al terminar. O sea que
+los controles **no se pintaban de blanco: no se pintaban en absoluto**. Una
+ventana hija que todavía no ha recibido su primer `WM_PAINT` se ve blanca.
 
-**No se puede fotografiar.** `PrintWindow` le pide a la ventana que se dibuje, o
-sea que fuerza el repintado y el destello desaparece. La evidencia es la captura
-de pantalla del usuario y la lectura del código. Es `NAP-048` en el backlog del
-SDK.
+### La causa
+
+`ssbapp.c`, al arrancar:
+
+```c
+window_show(app->window);
+
+app_apply_chrome(app);
+app_reload_sources(app);     /* enumera dispositivos: abre COM y pregunta */
+app_set_cmdmode(app, FALSE);
+i_settings_load(app);
+app_relabel(app);
+```
+
+La ventana se enseñaba y **después** se hacía el resto del arranque. Hasta que
+eso terminaba, el bucle de mensajes no llegaba a repintar y los controles se
+quedaban sin pintar a la vista.
+
+### El arreglo, y lo que mide
+
+`window_show` pasa al final. La ventana aparece algo más tarde, ya pintada.
+
+```
+antes:    54 % de blanco desde los 542 ms hasta los 906 ms
+despues:  3,4 % en el primer fotograma, 1,7 % a partir del siguiente
+```
+
+Ese 1,7 % que queda es el texto claro sobre fondo oscuro, que el detector cuenta
+como blanco: el estado normal de la ventana, no un destello.
+
+La ventana aparece a los 636 ms en vez de a los 540. Es el cambio correcto:
+antes salía pronto y rota, ahora sale un poco más tarde y entera.
+
+### Un método que no servía
+
+La primera medición se hizo con `PrintWindow` y dio «0,1 % de blanco desde el
+primer fotograma», que era mentira: `PrintWindow` le pide a la ventana que se
+dibuje, o sea que fuerza el repintado y borra justo lo que se quería medir. Hay
+que leer el DC de la ventana con `BitBlt`, que copia lo que hay en pantalla sin
+pedir nada.
 
 ## El congelón al exportar: medido, no arreglado
 

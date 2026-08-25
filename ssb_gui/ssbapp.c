@@ -1726,8 +1726,20 @@ static App *i_create(void)
     window_hotkey(app->window, ekKEY_D, ekMKEY_CONTROL, listener(app, i_OnFolder, App));
     window_hotkey(app->window, ekKEY_F1, 0, listener(app, i_OnKeyHelp, App));
     gui_OnThemeChanged(listener(app, i_OnTheme, App));
-    window_show(app->window);
-
+    /* Todo lo que queda por hacer va ANTES de ensenar la ventana.
+     *
+     * Estaba despues, y el resultado era el destello: la ventana aparecia y los
+     * botones y el lienzo se veian en blanco hasta que estas llamadas
+     * terminaban y el bucle de mensajes llegaba a repintar. Enumerar los
+     * dispositivos de audio —`app_reload_sources`— es lo que mas tarda, porque
+     * abre COM y pregunta al sistema.
+     *
+     * Medido con BitBlt del DC de la ventana cada 30 ms: 54 % de la ventana en
+     * blanco desde los 542 ms hasta los 906 ms. Los controles no es que se
+     * pintaran de blanco: es que no habian recibido su primer WM_PAINT, y una
+     * ventana hija sin pintar se ve blanca. Se comprobo tinendo el relleno de
+     * los botones de rojo y el del lienzo de verde: durante el destello no
+     * habia ni rojo ni verde, y los dos aparecian de golpe al terminar. */
     app_apply_chrome(app);
     app_reload_sources(app);
     app_set_cmdmode(app, FALSE);
@@ -1737,6 +1749,8 @@ static App *i_create(void)
     i_read_args(app);
     wave_clamp(app);
     wave_resize(app);
+
+    window_show(app->window);
     return app;
 }
 
