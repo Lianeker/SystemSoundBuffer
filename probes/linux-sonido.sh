@@ -102,14 +102,25 @@ sonido_arranca()
 
 # El tono como fichero, no con module-sine: PipeWire no implementa ese modulo
 # ("No such entity"), asi que la unica forma de sonar igual en los dos es
-# reproducir un WAV. Un solo `paplay`, largo: varios seguidos serian varios
-# sink-input distintos y eso estorba a la captura por aplicacion.
-sonido_tono()
+# reproducir un WAV. Un solo `paplay` por tono, largo: varios seguidos serian
+# varios sink-input distintos y la captura por aplicacion perderia su objetivo
+# al terminar el primero.
+#
+#   sonido_tono_id DIR SEGUNDOS FRECUENCIA BINARIO   -> imprime el pid
+#
+# BINARIO va a `application.process.binary`, que es la propiedad por la que el
+# motor identifica una aplicacion (ver i_cb_sinkinput en ssb_capture_linux.c).
+# Dos `paplay` con binarios distintos son, para el motor, dos aplicaciones
+# distintas, que es lo que hace falta para probar la captura por aplicacion.
+sonido_tono_id()
 {
     _dir=$1
-    _secs=${2:-90}
-    _wav="$_dir/tono.wav"
-    python3 - "$_wav" "$SSB_FREQ" "$_secs" "$SSB_RATE" <<'PY'
+    _secs=$2
+    _frq=$3
+    _bin=$4
+    _wav="$_dir/tono-$_frq.wav"
+    if [ ! -f "$_wav" ]; then
+        python3 - "$_wav" "$_frq" "$_secs" "$SSB_RATE" <<'PY'
 import math, struct, sys, wave
 path, freq, secs, rate = sys.argv[1], float(sys.argv[2]), int(float(sys.argv[3])), int(sys.argv[4])
 b = bytearray()
@@ -121,9 +132,21 @@ w.setnchannels(2); w.setsampwidth(2); w.setframerate(rate)
 w.writeframes(bytes(b) * max(1, secs))
 w.close()
 PY
-    [ -f "$_wav" ] || { echo "no se pudo generar el tono"; return 1; }
-    paplay --device="$SSB_SINK" "$_wav" &
-    SSB_TONO_PID=$!
+    fi
+    [ -f "$_wav" ] || return 1
+    # La salida va a /dev/null y no a la tuberia de la sustitucion de ordenes
+    # que recoge el pid: al cerrarse esa tuberia, `paplay` moriria de SIGPIPE en
+    # cuanto escribiera algo. Costo un "no encontrado" que parecia del motor.
+    paplay --device="$SSB_SINK" --property=application.process.binary="$_bin" "$_wav" \
+        >/dev/null 2>&1 &
+    echo $!
+}
+
+sonido_tono()
+{
+    _p=$(sonido_tono_id "$1" "${2:-90}" "$SSB_FREQ" ssb-tono) || return 1
+    [ -n "$_p" ] || { echo "no se pudo generar el tono"; return 1; }
+    SSB_TONO_PIDS="$SSB_TONO_PIDS $_p"
     # Un momento para que suene antes de grabar: si se graba desde el primer
     # instante, el principio es silencio y el centro que analiza tono.py podria
     # caer ahi.
@@ -156,10 +179,10 @@ sonido_diagnostico()
 
 sonido_para()
 {
-    [ -n "$SSB_TONO_PID" ] && kill $SSB_TONO_PID 2>/dev/null
+    [ -n "$SSB_TONO_PIDS" ] && kill $SSB_TONO_PIDS 2>/dev/null
     [ -n "$SSB_SND_PIDS" ] && kill $SSB_SND_PIDS 2>/dev/null
     [ -n "$SSB_DBUS_PID" ] && kill $SSB_DBUS_PID 2>/dev/null
-    SSB_TONO_PID=''
+    SSB_TONO_PIDS=''
     SSB_SND_PIDS=''
     SSB_DBUS_PID=''
     # Un instante para que suelten los ficheros del directorio de trabajo: si

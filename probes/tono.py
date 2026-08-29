@@ -64,11 +64,27 @@ def goertzel(x, rate, freq):
 
 
 def main():
-    if len(sys.argv) < 3:
-        sys.exit('uso: tono.py fichero.wav frecuencia [segundos_esperados]')
-    path = sys.argv[1]
-    freq = float(sys.argv[2])
-    esperados = float(sys.argv[3]) if len(sys.argv) > 3 else 0.0
+    # tono.py fichero.wav frecuencia [segundos] [--sin F1,F2]
+    #
+    # `--sin` son frecuencias que NO pueden estar. Se anaden a los senuelos, asi
+    # que el tono buscado tiene que dominarlas igual que a los demas. Es lo que
+    # distingue "he capturado esta aplicacion" de "he capturado todo el sink":
+    # sin esa comprobacion, grabar de mas tambien pasaria.
+    args = []
+    prohibidas = []
+    k = 1
+    while k < len(sys.argv):
+        if sys.argv[k] == '--sin' and k + 1 < len(sys.argv):
+            prohibidas = [float(x) for x in sys.argv[k + 1].split(',') if x]
+            k += 2
+        else:
+            args.append(sys.argv[k])
+            k += 1
+    if len(args) < 2:
+        sys.exit('uso: tono.py fichero.wav frecuencia [segundos_esperados] [--sin F1,F2]')
+    path = args[0]
+    freq = float(args[1])
+    esperados = float(args[2]) if len(args) > 2 else 0.0
 
     canal0, rate, frames, canales, bits = leer_canal0(path)
     dur = frames / float(rate) if rate else 0.0
@@ -90,12 +106,11 @@ def main():
     print('  %8.1f Hz  %.3e   <- buscado' % (freq, obj))
 
     peor = 0.0
-    for m in SENUELOS:
-        f = freq * m
-        if f >= rate / 2.0:
+    for f in [freq * m for m in SENUELOS] + prohibidas:
+        if f >= rate / 2.0 or f <= 0.0:
             continue
         e = goertzel(x, rate, f)
-        print('  %8.1f Hz  %.3e' % (f, e))
+        print('  %8.1f Hz  %.3e%s' % (f, e, '   <- no puede estar' if f in prohibidas else ''))
         if e > peor:
             peor = e
 
