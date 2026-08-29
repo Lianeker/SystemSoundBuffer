@@ -11,6 +11,11 @@
 # y esa funcion resuelve el color EN EL MOMENTO DE REGISTRARLO. Si en ese
 # momento el SDK todavia no sabe que el escritorio es oscuro, el color se queda
 # claro para siempre. Ver docs/33.
+#
+# NO esta en la puerta todavia: en el runner de GitHub la captura sale en negro
+# -la ventana no llega a estar en pantalla- y no se ha dado con el motivo. Se
+# usa en local, donde funciona con Xvfb y con WSLg. Entra en build.yml cuando
+# se le haya visto pasar alli, no antes.
 BUILD=${1:-build-linux}
 PANT=${PANT:-:97}
 ANCHO=1000

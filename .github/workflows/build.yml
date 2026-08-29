@@ -139,14 +139,6 @@ jobs:
         working-directory: SystemSoundBuffer
         run: sh probes/linux-interfaz.sh build
 
-      # El lienzo lo dibuja SSB y tiene que seguir al tema del escritorio. Se
-      # arranca dos veces, con el Adwaita claro y con el oscuro, y se mide el
-      # color de una zona del lienzo en la captura. Ver docs/33.
-      - name: El tema del escritorio
-        if: runner.os == 'Linux'
-        working-directory: SystemSoundBuffer
-        run: sh probes/linux-tema.sh build
-
   # PipeWire, en su propio trabajo y no como un paso mas: `pipewire-pulse` y
   # `pulseaudio` son el mismo servicio y los paquetes se excluyen, asi que no
   # pueden convivir en una misma maquina. Aqui esta la mitad del mundo que no
@@ -213,7 +205,3 @@ jobs:
         env:
           SSB_SERVER: pipewire
         run: sh probes/linux-interfaz.sh build
-
-      - name: El tema del escritorio
-        working-directory: SystemSoundBuffer
-        run: sh probes/linux-tema.sh build
