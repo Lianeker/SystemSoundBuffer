@@ -125,10 +125,13 @@ fallara — bastó con que alguien contara los descriptores al salir.
 
 - **`huecos 1`** en la ejecución de la interfaz: una re-anclada de la línea de
   tiempo en unos 12 s, o sea que la fuente perdió audio una vez. En la captura por
-  línea de comandos salen 0. Puede ser el planificador de WSL o puede ser el
-  backend; hace falta repetirlo en el runner, que es una máquina limpia.
+  línea de comandos salen 0. **Se reproduce igual en el runner**, que es una
+  máquina limpia sin WSL de por medio, así que no es el planificador: es el
+  backend o el arranque de la pista en la interfaz. Es lo primero que hay que
+  mirar ahora, y el arnés ya lo mide solo.
 - **`Non-dealloc Mutex: 3/2`**: queda un mutex sin destruir. No es el de la pista
-  —esos se destruyen— así que está en otro sitio.
+  —esos se destruyen— así que está en otro sitio. También se reproduce en el
+  runner.
 - **PipeWire**: la mayoría de distribuciones de hoy no corren PulseAudio puro sino
   `pipewire-pulse`. Con este arnés, comprobarlo cuesta una fila más de la matriz.
   Sigue sin comprobarse.
@@ -145,3 +148,10 @@ fallara — bastó con que alguien contara los descriptores al salir.
 `probes/linux-interfaz.sh` en verde, y validados contra entradas que tienen que
 fallar. Los dos entran en el CI: el primero en el trabajo del motor, el segundo en
 el de la interfaz.
+
+Primera ejecución en el runner, con los cuatro trabajos en verde:
+
+```
+motor    linux-x64-gcc   dominio  856899x   discontinuidades 0
+interfaz linux-x64-gcc   dominio 1067610x   huecos 1
+```
