@@ -62,14 +62,28 @@ mide() {
         "$RAIZ/$BUILD/ssbgui" --lang en --script "$TRABAJO/espera.ssb" \
         >"$_dir/salida.txt" 2>&1 &
     _pid=$!
-    sleep 4
+
+    # Esperar a que la ventana este de verdad en pantalla. Con un `sleep` fijo,
+    # en una maquina lenta la foto sale del fondo negro del X virtual, y eso
+    # ademas ENGANABA a la prueba: negro pasa por oscuro. Ver docs/33.
+    _i=0
+    while [ $_i -lt 60 ]; do
+        if DISPLAY="$PANT" xwininfo -root -tree 2>/dev/null | grep -q 'SystemSoundBuffer'; then
+            break
+        fi
+        _i=$((_i + 1))
+        sleep 0.25
+    done
+    sleep 1
+
     DISPLAY="$PANT" import -window root "$_dir/shot.png" 2>/dev/null
     convert "$_dir/shot.png" -depth 8 "$_dir/shot.ppm" 2>/dev/null
     kill $_pid 2>/dev/null
     wait $_pid 2>/dev/null
     cd "$RAIZ" || return 1
     echo "GTK_THEME=$_tema  (se espera lienzo $_espera)"
-    python3 probes/tema.py "$_dir/shot.ppm" $ZX $ZY $ZW $ZH "$_espera"
+    python3 probes/tema.py "$_dir/shot.ppm" $ZX $ZY $ZW $ZH "$_espera" | tee "$_dir/medida.txt"
+    return ${PIPESTATUS:-$?}
 }
 
 mide claro  "Adwaita"      claro
@@ -78,9 +92,24 @@ echo
 mide oscuro "Adwaita:dark" oscuro
 R2=$?
 
+# Los dos temas TIENEN que dar medidas distintas. Si salen iguales es que no se
+# esta midiendo la ventana -por ejemplo el fondo del X virtual- y entonces que
+# una de las dos cuadre no significa nada.
+C1=$(sed -n 's/.*rgb(\([^)]*\)).*/\1/p' "$TRABAJO/claro/medida.txt" 2>/dev/null)
+C2=$(sed -n 's/.*rgb(\([^)]*\)).*/\1/p' "$TRABAJO/oscuro/medida.txt" 2>/dev/null)
 echo
+if [ -z "$C1" ] || [ -z "$C2" ]; then
+    echo "FALLO: no se pudo medir una de las dos capturas"
+    exit 1
+fi
+if [ "$C1" = "$C2" ]; then
+    echo "FALLO: los dos temas dan el mismo color, rgb($C1)."
+    echo "       No se esta midiendo la ventana, asi que el resultado no vale."
+    exit 1
+fi
+
 if [ $R1 -eq 0 ] && [ $R2 -eq 0 ]; then
-    echo "tema en Linux: OK"
+    echo "tema en Linux: OK  (claro rgb($C1), oscuro rgb($C2))"
     exit 0
 fi
 echo "tema en Linux: FALLO"
