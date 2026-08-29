@@ -91,6 +91,7 @@ cmake --build build-linux
 ctest --test-dir build-linux
 
 sh probes/linux-tono.sh 10          # virtual sink + known tone: proves capture records it
+SSB_SERVER=pipewire sh probes/linux-tono.sh   # the same, against PipeWire
 sh probes/linux-interfaz.sh         # the whole GUI cycle under Xvfb, verifying the export
 sh probes/linux-captura.sh 25       # records the sink monitor and one application
 sh probes/linux-reproduccion.sh     # plays a saved range and listens to the result
@@ -168,6 +169,7 @@ was based on. Written in Spanish.
 | [27](docs/27-lo-escrito-y-lo-que-ocupa.md) | The disk figure counted every block ever written, not what the ring holds |
 | [28](docs/28-linux-deja-de-ser-una-promesa.md) | A virtual sound server in CI: Linux capture and the GTK cycle, proven rather than claimed |
 | [29](docs/29-el-paquete-corto-no-es-fresco.md) | PulseAudio short packets were timestamped late, faking a gap that never happened |
+| [30](docs/30-pipewire-y-el-sink-que-no-existia.md) | PipeWire returns an unresolvable @DEFAULT_SINK@ placeholder; the harness now picks its server |
 
 ## Dependencies
 

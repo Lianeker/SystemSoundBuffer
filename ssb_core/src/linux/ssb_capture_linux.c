@@ -360,6 +360,25 @@ int ssb_output_muted(const ssb_source *src)
 
 /* ------------------------------------------------------------ parseo de spec */
 
+/* Un nombre de dispositivo servible.
+ *
+ * PulseAudio devuelve el nombre real del dispositivo por omision. PipeWire
+ * puede devolver el marcador `@DEFAULT_SINK@` sin resolver —pasa cuando no hay
+ * politica de sesion que haya elegido uno, por ejemplo con un sink virtual
+ * recien creado— y encima NO lo resuelve si se le pregunta por el:
+ *
+ *     $ pactl get-default-sink
+ *     @DEFAULT_SINK@
+ *     $ pactl get-sink-volume @DEFAULT_SINK@
+ *     Failed to get sink information: No such entity
+ *
+ * Asi que cualquier nombre que empiece por '@' es un marcador, no un
+ * dispositivo, y hay que caer al primero que haya en vez de rendirse. */
+static int i_name_usable(const char *n)
+{
+    return (n != NULL && n[0] != 0 && n[0] != '@') ? 1 : 0;
+}
+
 /* Nombre legible del dispositivo por omision. Es lo unico que la parte portable
    no puede saber, porque hay que preguntarselo al servidor. */
 static void i_default_name(ssb_src_kind kind, char *out, uint32_t size)
@@ -389,10 +408,24 @@ static void i_default_name(ssb_src_kind kind, char *out, uint32_t size)
     for (i = 0; i < co.n && i < SSB_WATCH_MAX; ++i)
     {
         const char *want = (kind == ssb_src_output_device) ? co.def_sink : co.def_source;
-        if (list[i].kind == kind && want[0] != 0 && strcmp(list[i].id, want) == 0)
+        if (list[i].kind == kind && i_name_usable(want) && strcmp(list[i].id, want) == 0)
         {
             snprintf(out, size, "%s", list[i].name);
             break;
+        }
+    }
+    /* Sin dispositivo por omision servible, el primero de esa clase. Es lo que
+       de verdad se va a abrir (ver el respaldo de ssb_capture_open), asi que el
+       nombre que se ensena tiene que ser ese y no "por omision". */
+    if (out[0] == 0)
+    {
+        for (i = 0; i < co.n && i < SSB_WATCH_MAX; ++i)
+        {
+            if (list[i].kind == kind)
+            {
+                snprintf(out, size, "%s", list[i].name);
+                break;
+            }
         }
     }
     i_conn_close(&conn);
@@ -454,7 +487,7 @@ static void i_cb_res_server(pa_context *c, const pa_server_info *i, void *ud)
     (void)c;
     if (i != NULL)
     {
-        if (r->source[0] == 0 && i->default_sink_name != NULL)
+        if (r->source[0] == 0 && i_name_usable(i->default_sink_name))
             snprintf(r->source, sizeof(r->source), "%s.monitor", i->default_sink_name);
     }
     pa_threaded_mainloop_signal(r->conn->ml, 0);
@@ -464,9 +497,41 @@ static void i_cb_res_defsource(pa_context *c, const pa_server_info *i, void *ud)
 {
     i_resolve *r = (i_resolve *)ud;
     (void)c;
-    if (i != NULL && i->default_source_name != NULL)
+    if (i != NULL && i_name_usable(i->default_source_name))
         snprintf(r->source, sizeof(r->source), "%s", i->default_source_name);
     pa_threaded_mainloop_signal(r->conn->ml, 0);
+}
+
+/* Respaldo cuando no hay dispositivo por omision servible: el primero que haya. */
+static void i_cb_res_firstsink(pa_context *c, const pa_sink_info *i, int eol, void *ud)
+{
+    i_resolve *r = (i_resolve *)ud;
+    (void)c;
+    if (eol != 0)
+    {
+        pa_threaded_mainloop_signal(r->conn->ml, 0);
+        return;
+    }
+    if (i == NULL || r->source[0] != 0 || !i_name_usable(i->name))
+        return;
+    snprintf(r->source, sizeof(r->source), "%s.monitor", i->name);
+}
+
+static void i_cb_res_firstsource(pa_context *c, const pa_source_info *i, int eol, void *ud)
+{
+    i_resolve *r = (i_resolve *)ud;
+    (void)c;
+    if (eol != 0)
+    {
+        pa_threaded_mainloop_signal(r->conn->ml, 0);
+        return;
+    }
+    if (i == NULL || r->source[0] != 0 || !i_name_usable(i->name))
+        return;
+    /* Un monitor no es una entrada: es la salida de un sink vista del reves. */
+    if (i->monitor_of_sink != PA_INVALID_INDEX)
+        return;
+    snprintf(r->source, sizeof(r->source), "%s", i->name);
 }
 
 static void i_cb_res_sinkinput(pa_context *c, const pa_sink_input_info *i, int eol, void *ud)
@@ -667,16 +732,28 @@ ssb_res ssb_capture_open(const ssb_source *src, ssb_audio_fn fn, void *ctx,
     else if (src->kind == ssb_src_output_device)
     {
         if (src->id[0] != 0)
+        {
             snprintf(r.source, sizeof(r.source), "%s.monitor", src->id);
+        }
         else
+        {
             i_wait(&c->conn, pa_context_get_server_info(c->conn.ctx, i_cb_res_server, &r));
+            if (r.source[0] == 0)
+                i_wait(&c->conn, pa_context_get_sink_info_list(c->conn.ctx, i_cb_res_firstsink, &r));
+        }
     }
     else
     {
         if (src->id[0] != 0)
+        {
             snprintf(r.source, sizeof(r.source), "%s", src->id);
+        }
         else
+        {
             i_wait(&c->conn, pa_context_get_server_info(c->conn.ctx, i_cb_res_defsource, &r));
+            if (r.source[0] == 0)
+                i_wait(&c->conn, pa_context_get_source_info_list(c->conn.ctx, i_cb_res_firstsource, &r));
+        }
     }
 
     if (r.source[0] == 0)
