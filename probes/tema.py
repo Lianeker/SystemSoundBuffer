@@ -33,9 +33,13 @@ def lee_ppm(path):
         i = j
     i += 1
     w, h, mx = campos
-    if mx != 255:
-        sys.exit('solo se admite PPM de 8 bits')
-    return w, h, d[i:i + w * h * 3]
+    # ImageMagick escribe 16 bits por canal segun la version, asi que hay que
+    # admitir los dos anchos en vez de dar por hecho el de esta maquina.
+    if mx == 255:
+        return w, h, d[i:i + w * h * 3], 1
+    if mx == 65535:
+        return w, h, d[i:i + w * h * 6], 2
+    sys.exit('PPM con maxval %d, no admitido' % mx)
 
 
 def main():
@@ -45,21 +49,28 @@ def main():
     x0, y0, aw, ah = (int(v) for v in sys.argv[2:6])
     espera = sys.argv[6] if len(sys.argv) > 6 else ''
 
-    w, h, px = lee_ppm(path)
+    w, h, px, ancho = lee_ppm(path)
     if x0 + aw > w or y0 + ah > h:
         sys.exit('la zona %d,%d %dx%d no cabe en la imagen %dx%d' % (x0, y0, aw, ah, w, h))
 
+    paso = 3 * ancho
+    tope = float(255 if ancho == 1 else 65535)
     sr = sg = sb = 0
     n = 0
     for y in range(y0, y0 + ah):
-        base = (y * w + x0) * 3
+        base = (y * w + x0) * paso
         for k in range(aw):
-            o = base + k * 3
-            sr += px[o]
-            sg += px[o + 1]
-            sb += px[o + 2]
+            o = base + k * paso
+            if ancho == 1:
+                sr += px[o]
+                sg += px[o + 1]
+                sb += px[o + 2]
+            else:
+                sr += (px[o] << 8) | px[o + 1]
+                sg += (px[o + 2] << 8) | px[o + 3]
+                sb += (px[o + 4] << 8) | px[o + 5]
             n += 1
-    r, g, b = sr / n / 255.0, sg / n / 255.0, sb / n / 255.0
+    r, g, b = sr / n / tope, sg / n / tope, sb / n / tope
     lum = 0.21 * r + 0.72 * g + 0.07 * b
 
     print('  zona %d,%d %dx%d  ->  rgb(%d, %d, %d)  luminancia %.3f'

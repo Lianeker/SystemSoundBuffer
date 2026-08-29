@@ -64,7 +64,7 @@ mide() {
     _pid=$!
     sleep 4
     DISPLAY="$PANT" import -window root "$_dir/shot.png" 2>/dev/null
-    convert "$_dir/shot.png" "$_dir/shot.ppm" 2>/dev/null
+    convert "$_dir/shot.png" -depth 8 "$_dir/shot.ppm" 2>/dev/null
     kill $_pid 2>/dev/null
     wait $_pid 2>/dev/null
     cd "$RAIZ" || return 1

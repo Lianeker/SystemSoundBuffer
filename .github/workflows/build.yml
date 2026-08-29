@@ -173,7 +173,8 @@ jobs:
           sudo apt-get install -y ninja-build pkg-config libpulse-dev \
             libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
             freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
-            pipewire pipewire-pulse wireplumber pulseaudio-utils xvfb dbus \n            imagemagick x11-utils
+            pipewire pipewire-pulse wireplumber pulseaudio-utils xvfb dbus \
+            imagemagick x11-utils
 
       - name: Que servidor hay
         run: |
