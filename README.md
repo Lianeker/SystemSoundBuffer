@@ -172,6 +172,7 @@ was based on. Written in Spanish.
 | [29](docs/29-el-paquete-corto-no-es-fresco.md) | PulseAudio short packets were timestamped late, faking a gap that never happened |
 | [30](docs/30-pipewire-y-el-gestor-de-sesion.md) | PipeWire in CI: wireplumber needs a session bus, and three symptoms were one fault |
 | [31](docs/31-grabar-una-aplicacion-y-no-la-de-al-lado.md) | Per-application capture on Linux, tested with a second app that must NOT be recorded |
+| [32](docs/32-el-informe-que-nadie-miraba.md) | The SDK reports unreleased resources on exit; it is now a gate, not a log line |
 
 ## Dependencies
 

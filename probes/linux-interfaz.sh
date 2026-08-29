@@ -51,9 +51,11 @@ GUION
 
 echo "=== la interfaz, bajo Xvfb, con $SSB_SERVER ==="
 cd "$TRABAJO" || exit 1
-xvfb-run -a "$RAIZ/$BUILD/ssbgui" --lang en --script "$TRABAJO/ciclo.ssb"
+xvfb-run -a "$RAIZ/$BUILD/ssbgui" --lang en --script "$TRABAJO/ciclo.ssb" \
+    >"$TRABAJO/gui.out" 2>&1
 RESGUI=$?
 cd "$RAIZ" || exit 1
+cat "$TRABAJO/gui.out"
 
 echo "codigo de salida de la interfaz: $RESGUI"
 echo
@@ -75,16 +77,31 @@ fi
 
 echo "=== comprobacion de lo que exporto la interfaz ==="
 python3 "$RAIZ/probes/tono.py" "$WAV" "$SSB_FREQ"
-RES=$?
+RESTONO=$?
+
+# El SDK cuenta al salir los recursos que se quedaron sin soltar. Ese informe
+# encontro dos defectos de verdad —un hilo que seguia leyendo memoria liberada
+# (docs/28) y el cerrojo de ese hilo (docs/31)— y no lo miraba nadie: se leia de
+# casualidad al mirar el registro. Ahora es una puerta.
+RESREC=0
+if grep -q "Non-dealloc" "$TRABAJO/gui.out"; then
+    RESREC=1
+fi
 
 echo
 if [ $RESGUI -ne 0 ]; then
     echo "interfaz en Linux ($SSB_SERVER): FALLO (salio con $RESGUI)"
     exit 1
 fi
-if [ $RES -eq 0 ]; then
-    echo "interfaz en Linux ($SSB_SERVER): OK"
-else
+if [ $RESTONO -ne 0 ]; then
     echo "interfaz en Linux ($SSB_SERVER): FALLO (el WAV exportado no lleva el tono)"
 fi
-exit $RES
+if [ $RESREC -ne 0 ]; then
+    echo "interfaz en Linux ($SSB_SERVER): FALLO (recursos sin soltar al salir)"
+    grep "Non-dealloc" "$TRABAJO/gui.out" | sed 's/^/  /'
+fi
+if [ $RESTONO -eq 0 ] && [ $RESREC -eq 0 ]; then
+    echo "interfaz en Linux ($SSB_SERVER): OK"
+    exit 0
+fi
+exit 1

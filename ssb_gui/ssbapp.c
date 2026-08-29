@@ -1768,6 +1768,10 @@ static void i_destroy(App **app)
         bthread_wait((*app)->job.th);
         bthread_close(&(*app)->job.th);
     }
+    /* Despues de esperar al hilo, nunca antes: es el cerrojo con el que ese
+       hilo se comunica con la interfaz. */
+    if ((*app)->job.mtx != NULL)
+        bmutex_close(&(*app)->job.mtx);
     app_play_stop(*app);
     ssb_watch_stop();
     for (i = 0; i < (*app)->ntracks; ++i)
