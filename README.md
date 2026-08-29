@@ -167,6 +167,7 @@ was based on. Written in Spanish.
 | [26](docs/26-el-destello-y-el-congelon.md) | Startup flash; export moved to a worker thread, and why the freeze remains |
 | [27](docs/27-lo-escrito-y-lo-que-ocupa.md) | The disk figure counted every block ever written, not what the ring holds |
 | [28](docs/28-linux-deja-de-ser-una-promesa.md) | A virtual sound server in CI: Linux capture and the GTK cycle, proven rather than claimed |
+| [29](docs/29-el-paquete-corto-no-es-fresco.md) | PulseAudio short packets were timestamped late, faking a gap that never happened |
 
 ## Dependencies
 

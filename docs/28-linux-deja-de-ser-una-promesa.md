@@ -126,9 +126,11 @@ fallara — bastó con que alguien contara los descriptores al salir.
 - **`huecos 1`** en la ejecución de la interfaz: una re-anclada de la línea de
   tiempo en unos 12 s, o sea que la fuente perdió audio una vez. En la captura por
   línea de comandos salen 0. **Se reproduce igual en el runner**, que es una
-  máquina limpia sin WSL de por medio, así que no es el planificador: es el
-  backend o el arranque de la pista en la interfaz. Es lo primero que hay que
-  mirar ahora, y el arnés ya lo mide solo.
+  máquina limpia sin WSL de por medio, así que no es el planificador.
+  **Resuelto en [`docs/29`](29-el-paquete-corto-no-es-fresco.md)**: el backend
+  sellaba tarde los paquetes cortos de PulseAudio, y el hueco lo fabricaba el
+  sello. De paso, «en la línea de comandos salen 0» era falso — el CLI imprimía
+  discontinuidades, no re-anclas, así que la comparación no estaba hecha.
 - **`Non-dealloc Mutex: 3/2`**: queda un mutex sin destruir. No es el de la pista
   —esos se destruyen— así que está en otro sitio. También se reproduce en el
   runner.

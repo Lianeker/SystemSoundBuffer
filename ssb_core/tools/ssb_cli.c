@@ -220,7 +220,7 @@ static int i_cmd_rec(int argc, char **argv)
                    (double)st.raw_bytes / 1024.0, st.ratio);
             printf("      bloques %u vivos, %u descartados, %u en silencio\n",
                    (unsigned)st.blocks, (unsigned)st.dropped, (unsigned)st.silent_blocks);
-            printf("      discontinuidades %u, pico %.4f\n", (unsigned)st.discont, st.peak);
+            printf("      discontinuidades %u, reanclas %u, pico %.4f\n", (unsigned)st.discont, (unsigned)st.reanchors, st.peak);
             printf("      frecuencia efectiva %.1f Hz de %u nominales (%+.3f %%)\n",
                    st.eff_rate, (unsigned)st.rate,
                    st.rate ? 100.0 * (st.eff_rate - st.rate) / st.rate : 0.0);

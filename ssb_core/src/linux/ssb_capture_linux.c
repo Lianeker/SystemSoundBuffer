@@ -422,7 +422,17 @@ struct ssb_capture_t
        entrega el paquete partido. */
     float *buf;
     size_t buf_cap;
+    /* Donde acabo el paquete anterior, si el flujo viene siendo continuo.
+       Sirve para no sellar tarde un paquete corto: ver i_stream_read. */
+    ssb_time t_next;
 };
+
+/* Cuanto se acepta corregir hacia atras el sello de un paquete. Por encima de
+   esto se cree al reloj: es un hueco de verdad y la linea de tiempo del motor
+   tiene que verlo. El liston del motor son 8 ms sostenidos tres paquetes
+   (ssb_track.c:26), y las desviaciones medidas aqui llegan a 20 ms, asi que el
+   margen tiene que cubrirlas sin tragarse un corte real. */
+#define SSB_PA_SLACK_MS 40
 
 /* Resuelve, para una fuente, de que source hay que grabar y —si es una
    aplicacion— a que sink-input hay que acotar el monitor. */
@@ -536,8 +546,11 @@ static void i_stream_read(pa_stream *s, size_t nbytes, void *ud)
         if (data == NULL)
         {
             /* Hueco. El servidor dice cuantos bytes faltan pero no los tiene:
-               no hay nada que entregar, solo que avisar. */
+               no hay nada que entregar, solo que avisar. Y se rompe la cadena:
+               lo que venga detras ya no es contiguo con lo de antes, asi que
+               vuelve a sellarse contra el reloj. */
             c->pending_disc = 1;
+            c->t_next = 0;
             pa_stream_drop(s);
             continue;
         }
@@ -565,9 +578,31 @@ static void i_stream_read(pa_stream *s, size_t nbytes, void *ud)
                    que es para lo que sirve la linea de tiempo aqui; solo corre
                    35 ms el origen absoluto. WASAPI da un sello por paquete y no
                    necesita esto; PulseAudio no ofrece equivalente fiable. */
-                ssb_time t = ssb_now();
+                /* `ahora - duracion` solo vale si el paquete trae datos recien
+                   producidos. PulseAudio entrega a menudo un trozo largo y un
+                   resto corto, y el corto NO es fresco: es la cola de lo que ya
+                   habia, que ha esperado. Al restarle solo SU duracion se sella
+                   hasta 20 ms tarde, y la marca llega a ir hacia atras respecto
+                   del paquete anterior. Medido con `ssb drift` sobre 12 s: 46
+                   saltos de mas de 5 ms, todos coincidiendo con un paquete
+                   corto. Eso es lo que re-anclaba la linea de tiempo del motor
+                   y contaba un hueco que no habia ocurrido.
+
+                   Un flujo continuo avanza exactamente `frames`, asi que si el
+                   sello cae DESPUES de donde acabo el anterior y la diferencia
+                   es pequena, manda la continuidad. Solo se corrige en ese
+                   sentido: si cae antes, es que la fuente va rapida —deriva, no
+                   hueco— y ahi manda el reloj, que es lo que impide que esto se
+                   convierta en una cuenta de frames a secas y se separe sola
+                   (docs/03). */
                 ssb_time dur = (ssb_time)frames * SSB_TICKS_PER_SEC / (ssb_time)c->rate;
-                t = (t > dur) ? (t - dur) : 0;
+                ssb_time now = ssb_now();
+                ssb_time t = (now > dur) ? (now - dur) : 0;
+                ssb_time slack = (ssb_time)SSB_PA_SLACK_MS * SSB_TICKS_PER_SEC / 1000;
+
+                if (c->t_next != 0 && t > c->t_next && (t - c->t_next) < slack)
+                    t = c->t_next;
+                c->t_next = t + dur;
                 c->fn(c->ctx, (const float *)data, frames, t, 0, c->pending_disc);
                 c->pending_disc = 0;
             }
