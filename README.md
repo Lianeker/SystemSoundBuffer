@@ -80,11 +80,29 @@ On Linux, `libpulse-dev` is required for the engine and the GTK3 stack for the
 interface:
 
 ```sh
+# Debian / Ubuntu                          (checked on Ubuntu 24.04)
 apt install build-essential cmake ninja-build pkg-config libpulse-dev \
             libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
             freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
             pulseaudio pulseaudio-utils xvfb
 
+# Fedora
+dnf install gcc-c++ cmake ninja-build pkgconf-pkg-config pulseaudio-libs-devel \
+            gtk3-devel libcurl-devel mesa-libGLU-devel freeglut-devel \
+            mesa-libGL-devel webkit2gtk4.1-devel \
+            pulseaudio-utils xorg-x11-server-Xvfb
+
+# Arch
+pacman -S base-devel cmake ninja pkgconf libpulse gtk3 curl glu freeglut \
+          webkit2gtk-4.1 xorg-server-xvfb
+```
+
+Only the Debian line is checked on this machine. `pulseaudio-utils`, `xvfb`
+and their equivalents are just for the probes, and `webkit2gtk` only if you
+build the SDK with its web module on — see **Prebuilt binaries** for why the
+released binary does not.
+
+```sh
 cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DSSB_NAPPGUI_DIR=../nappgui/install-linux/cmake
 cmake --build build-linux
@@ -129,8 +147,33 @@ directory the executable is launched from. Run it from a directory of its own.
 system libraries, so it needs **glibc 2.38 or newer** — on an older distribution
 it will not start and you have to build from source, which is four commands.
 
-At runtime `ssb` needs `libpulse0`; `ssbgui` also needs GTK 3 and libGL. A recent
-Ubuntu or Fedora desktop already has all of it.
+At runtime `ssb` needs libpulse; `ssbgui` also needs GTK 3 and libGL. A recent
+desktop already has all of it. If something is missing:
+
+```sh
+# Debian, Ubuntu, Mint, Pop!_OS            (checked on Ubuntu 24.04)
+sudo apt install libpulse0 libgtk-3-0t64 libgl1
+# on Ubuntu 22.04 and older that GTK package is libgtk-3-0, without the t64
+
+# Fedora, RHEL, Rocky, Alma
+sudo dnf install pulseaudio-libs gtk3 mesa-libGL
+
+# Arch, Manjaro, EndeavourOS
+sudo pacman -S libpulse gtk3 libglvnd
+
+# openSUSE
+sudo zypper install libpulse0 gtk3 Mesa-libGL1
+```
+
+Whatever the distribution, this tells you exactly what is missing and never
+guesses a package name:
+
+```sh
+ldd ssbgui | grep 'not found'
+```
+
+Run `./ssb list` before anything else. If it prints no sources, the problem is
+the sound server, not the program.
 
 Build it the same way for distribution, with the SDK's web module off:
 
@@ -202,3 +245,7 @@ was based on. Written in Spanish.
 None external. The GUI uses the NAppGUI SDK from `../nappgui`, consumed with
 `find_package(nappgui)` from its install prefix. Capture uses only operating
 system APIs.
+
+## Licence
+
+MIT — see [`LICENSE`](LICENSE). The NAppGUI SDK it links against is MIT too.
