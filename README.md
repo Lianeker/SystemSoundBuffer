@@ -93,6 +93,7 @@ ctest --test-dir build-linux
 sh probes/linux-tono.sh 10          # virtual sink + known tone: proves capture records it
 SSB_SERVER=pipewire sh probes/linux-tono.sh   # the same, against PipeWire
 sh probes/linux-aplicacion.sh       # records one app while another plays, and proves it
+sh probes/linux-gui.sh --tono       # opens the interface on a real display (WSLg), with a tone
 sh probes/linux-interfaz.sh         # the whole GUI cycle under Xvfb, verifying the export
 sh probes/linux-captura.sh 25       # records the sink monitor and one application
 sh probes/linux-reproduccion.sh     # plays a saved range and listens to the result
