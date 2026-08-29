@@ -47,6 +47,22 @@ sonido_arranca()
         chmod 700 "$XDG_RUNTIME_DIR"
         export XDG_RUNTIME_DIR
         unset PULSE_RUNTIME_PATH PULSE_SERVER
+
+        # wireplumber necesita un bus de SESION. Sin el se muere nada mas
+        # arrancar y, sin gestor de sesion, PipeWire acepta nodos pero no
+        # encamina nada: el sink se queda SUSPENDED y hasta un `parecord`
+        # normal graba silencio. En un runner sin escritorio el mensaje es
+        #   Error acquiring bus address: Cannot autolaunch D-Bus without X11 $DISPLAY
+        # Se levanta uno propio y se recoge al terminar.
+        if [ -z "$DBUS_SESSION_BUS_ADDRESS" ] && command -v dbus-daemon >/dev/null 2>&1; then
+            dbus-daemon --session --fork --print-address=3 --print-pid=4 \
+                3>"$_dir/dbus.addr" 4>"$_dir/dbus.pid" 2>/dev/null
+            if [ -s "$_dir/dbus.addr" ]; then
+                DBUS_SESSION_BUS_ADDRESS=$(cat "$_dir/dbus.addr")
+                export DBUS_SESSION_BUS_ADDRESS
+                SSB_DBUS_PID=$(cat "$_dir/dbus.pid" 2>/dev/null)
+            fi
+        fi
         # Sin systemd hay que levantar los tres a mano, que es tambien la
         # situacion del runner. wireplumber es el gestor de sesion: sin el, el
         # sink se crea pero nadie lo encamina.
@@ -142,8 +158,10 @@ sonido_para()
 {
     [ -n "$SSB_TONO_PID" ] && kill $SSB_TONO_PID 2>/dev/null
     [ -n "$SSB_SND_PIDS" ] && kill $SSB_SND_PIDS 2>/dev/null
+    [ -n "$SSB_DBUS_PID" ] && kill $SSB_DBUS_PID 2>/dev/null
     SSB_TONO_PID=''
     SSB_SND_PIDS=''
+    SSB_DBUS_PID=''
     # Un instante para que suelten los ficheros del directorio de trabajo: si
     # no, el `rm -rf` de quien llama se queja de directorio no vacio.
     sleep 1
