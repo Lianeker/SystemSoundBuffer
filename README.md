@@ -102,11 +102,14 @@ sh probes/linux-arranque.sh 25      # starts and closes the interface, counting 
 
 Builds with `/W4 /WX` on MSVC and `-Wall -Wextra -Werror` on gcc.
 
-## Standalone executable
+## Prebuilt binaries
+
+Both platforms are on the [releases page](../../releases).
+
+### Windows
 
 A Release build of `ssbgui.exe` needs no Visual C++ redistributable and no DLL
-beyond those Windows ships. It is ~600 KB. Prebuilt binaries are on the
-[releases page](../../releases).
+beyond those Windows ships. It is ~600 KB.
 
 ```
 > dumpbin /DEPENDENTS ssbgui.exe
@@ -119,6 +122,25 @@ static WebView2 loader.
 
 The ring buffer is created in `ssb-gui-buffer`, relative to the working
 directory the executable is launched from. Run it from a directory of its own.
+
+### Linux
+
+`SystemSoundBuffer-linux-x64.tar.gz`, built on Ubuntu 24.04. It links against
+system libraries, so it needs **glibc 2.38 or newer** — on an older distribution
+it will not start and you have to build from source, which is four commands.
+
+At runtime `ssb` needs `libpulse0`; `ssbgui` also needs GTK 3 and libGL. A recent
+Ubuntu or Fedora desktop already has all of it.
+
+Build it the same way for distribution, with the SDK's web module off:
+
+```sh
+cmake -S nappgui_src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release       -DNAPPGUI_DEMO=NO -DNAPPGUI_TESTS=NO -DNAPPGUI_WEB=NO       -DCMAKE_INSTALL_PREFIX=../install-linux-noweb
+```
+
+SSB has no WebView, and dropping that module removes webkit2gtk, javascriptcore
+and libsoup: 83 shared libraries instead of 142. That is the difference between
+starting on a freshly installed system and having to add packages first.
 
 ## Layout
 
