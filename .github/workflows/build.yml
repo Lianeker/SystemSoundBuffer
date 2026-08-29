@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config libpulse-dev \
-            pulseaudio pulseaudio-utils
+            pulseaudio pulseaudio-utils libmp3lame0 mpg123
 
       - name: Ninja en Windows
         if: runner.os == 'Windows'
@@ -67,6 +67,13 @@ jobs:
       - name: Captura por aplicacion
         if: runner.os == 'Linux'
         run: sh probes/linux-aplicacion.sh 10 build
+
+      # El MP3 lo hace LAME cargada en tiempo de ejecucion. Se codifica un tono
+      # conocido, se decodifica de vuelta y se comprueba que sigue ahi: sin el
+      # viaje de vuelta esto solo diria que sale un fichero. Ver docs/33.
+      - name: Codificar a MP3
+        if: runner.os == 'Linux'
+        run: sh probes/linux-mp3.sh build
 
   # La interfaz necesita el SDK, que se clona de su repositorio.
   interfaz:
@@ -166,7 +173,7 @@ jobs:
             libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
             freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
             pipewire pipewire-pulse wireplumber pulseaudio-utils xvfb dbus \
-            imagemagick x11-utils
+            imagemagick x11-utils libmp3lame0 mpg123
 
       - name: Que servidor hay
         run: |

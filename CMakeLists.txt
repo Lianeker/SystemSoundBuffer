@@ -45,6 +45,7 @@ if(WIN32)
                             ssb_core/src/win/ssb_play_win.cpp)
 elseif(UNIX AND NOT APPLE)
     list(APPEND SSB_SOURCES ssb_core/src/linux/ssb_capture_linux.c
+                            ssb_core/src/linux/ssb_encode_linux.c
                             ssb_core/src/linux/ssb_play_linux.c)
 else()
     message(FATAL_ERROR "Plataforma no soportada. El alcance es Windows y Linux (docs/01, seccion 6).")
@@ -62,7 +63,9 @@ else()
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(PULSE REQUIRED libpulse libpulse-simple)
     target_include_directories(ssb_core PRIVATE ${PULSE_INCLUDE_DIRS})
-    target_link_libraries(ssb_core PRIVATE Threads::Threads m ${PULSE_LIBRARIES})
+    # CMAKE_DL_LIBS es -ldl donde haga falta y vacio donde dlopen ya esta en
+    # libc (glibc 2.34 en adelante). El codificador de MP3 carga LAME asi.
+    target_link_libraries(ssb_core PRIVATE Threads::Threads m ${PULSE_LIBRARIES} ${CMAKE_DL_LIBS})
     target_link_directories(ssb_core PRIVATE ${PULSE_LIBRARY_DIRS})
 endif()
 

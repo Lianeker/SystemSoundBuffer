@@ -33,6 +33,11 @@ for t in Xvfb import convert python3; do
 done
 
 TRABAJO=$(mktemp -d /tmp/ssb-tema.XXXXXX)
+# Ajustes aislados: con el tema guardado de una sesion anterior, el caso claro
+# fallaria por un ajuste del usuario y no por un defecto.
+XDG_CONFIG_HOME="$TRABAJO/config"
+mkdir -p "$XDG_CONFIG_HOME"
+export XDG_CONFIG_HOME
 XP=''
 limpia() {
     [ -n "$XP" ] && kill $XP 2>/dev/null

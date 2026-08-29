@@ -125,6 +125,108 @@ bool_t app_span(App *app, ssb_time *from, ssb_time *to)
 
 /* ------------------------------------------------------------------ fuentes */
 
+/* Acorta por el MEDIO, con puntos suspensivos.
+ *
+ * El desplegable de fuentes tiene un ancho minimo de 240 px, pero un desplegable
+ * pide como ancho natural el de su entrada mas larga, y ese ancho GANA: con un
+ * dispositivo llamado "Family 17h/19h/1ah HD Audio Controller Speaker" la caja
+ * crecia hasta unos 440 px y se comia los botones de al lado, que quedaban
+ * pintados por debajo. Se veia en Linux porque alli los nombres de PulseAudio
+ * son largos, pero no es cosa de Linux: cualquier nombre largo lo provoca.
+ *
+ * Por el medio y no por el final porque lo que distingue a dos dispositivos
+ * suele estar en los dos extremos: "...Controller Speaker" y
+ * "...Controller Microphone" solo se diferencian al final.
+ *
+ * Cuenta caracteres, no bytes, y nunca parte una secuencia UTF-8: un nombre con
+ * acentos cortado a media secuencia sale como basura en pantalla. */
+static void i_shorten(const char_t *src, uint32_t maxch, char_t *out, uint32_t size)
+{
+    uint32_t nch = 0, i = 0;
+    uint32_t ini_bytes = 0, fin_bytes = 0, len;
+
+    for (i = 0; src[i] != 0; ++i)
+    {
+        if (((uint8_t)src[i] & 0xC0) != 0x80)
+            nch++;
+    }
+    len = i;
+
+    if (nch <= maxch || maxch < 8)
+    {
+        str_copy_c(out, size, src);
+        return;
+    }
+
+    /* Reparto: algo mas por delante, que es donde suele estar la marca. */
+    {
+        uint32_t ini_ch = (maxch - 1) / 2 + (maxch - 1) % 2;
+        uint32_t fin_ch = (maxch - 1) / 2;
+        uint32_t c = 0;
+        for (i = 0; i < len && c < ini_ch; ++i)
+        {
+            if (((uint8_t)src[i] & 0xC0) != 0x80)
+                c++;
+        }
+        while (i < len && ((uint8_t)src[i] & 0xC0) == 0x80)
+            i++;
+        ini_bytes = i;
+
+        c = 0;
+        i = len;
+        while (i > 0 && c < fin_ch)
+        {
+            i--;
+            while (i > 0 && ((uint8_t)src[i] & 0xC0) == 0x80)
+                i--;
+            c++;
+        }
+        fin_bytes = len - i;
+    }
+
+    if (ini_bytes + fin_bytes + 4 >= size)
+    {
+        str_copy_c(out, size, src);
+        return;
+    }
+    bmem_copy((byte_t *)out, (const byte_t *)src, ini_bytes);
+    out[ini_bytes] = '.';
+    out[ini_bytes + 1] = '.';
+    out[ini_bytes + 2] = '.';
+    bmem_copy((byte_t *)(out + ini_bytes + 3),
+              (const byte_t *)(src + len - fin_bytes), fin_bytes);
+    out[ini_bytes + 3 + fin_bytes] = 0;
+}
+
+/* Lo que le queda al texto de los 240 px del desplegable, quitando la flecha y
+   los margenes. */
+#define SRC_TEXT_PX 196.f
+
+/* Acorta hasta que QUEPA, midiendo con la fuente de verdad.
+ *
+ * Un numero fijo de caracteres no vale: el ancho depende de la fuente, del
+ * tamano del sistema y de que letras sean. Con 44 caracteres seguia
+ * desbordandose. Se mide y se baja hasta que entra. */
+static void i_fit(const char_t *pre, const char_t *nombre, const char_t *post,
+                  char_t *out, uint32_t size)
+{
+    Font *f = font_system(font_regular_size(), 0);
+    uint32_t maxch = 64;
+    real32_t w = 0, h = 0;
+
+    bstd_sprintf(out, size, "%s%s%s", pre, nombre, post);
+    font_extents(f, out, -1, &w, &h);
+    while (w > SRC_TEXT_PX && maxch > 8)
+    {
+        char_t corto[SSB_NAME_MAX * 2];
+        i_shorten(nombre, maxch, corto, sizeof(corto));
+        bstd_sprintf(out, size, "%s%s%s", pre, corto, post);
+        font_extents(f, out, -1, &w, &h);
+        maxch -= 2;
+    }
+    font_destroy(&f);
+}
+
 void app_reload_sources(App *app)
 {
     uint32_t i, idx_out = 0, idx_in = 0;
@@ -140,19 +242,30 @@ void app_reload_sources(App *app)
     for (i = 0; i < app->nsources; ++i)
     {
         char_t txt[SSB_NAME_MAX * 2 + 64];
+        char_t pre[64];
         const ssb_source *s = &app->list[i];
         if (s->kind == ssb_src_output_device)
-            bstd_sprintf(txt, sizeof(txt), "%s %u  -  %s",
-                         app->lang == LANG_EN ? "Output" : "Salida", idx_out++, s->name);
+        {
+            bstd_sprintf(pre, sizeof(pre), "%s %u  -  ",
+                         app->lang == LANG_EN ? "Output" : "Salida", idx_out++);
+            i_fit(pre, s->name, "", txt, sizeof(txt));
+        }
         else if (s->kind == ssb_src_input_device)
-            bstd_sprintf(txt, sizeof(txt), "%s %u  -  %s",
-                         app->lang == LANG_EN ? "Input" : "Entrada", idx_in++, s->name);
+        {
+            bstd_sprintf(pre, sizeof(pre), "%s %u  -  ",
+                         app->lang == LANG_EN ? "Input" : "Entrada", idx_in++);
+            i_fit(pre, s->name, "", txt, sizeof(txt));
+        }
         else
+        {
             /* Se dice por que salida esta sonando: una app puede estar
                renderizando a otro dispositivo del que capturas, y entonces
                grabas silencio sin ninguna pista de por que. */
-            bstd_sprintf(txt, sizeof(txt), "App  -  %s (pid %u)%s%s", s->name, s->pid,
+            char_t post[SSB_NAME_MAX + 32];
+            bstd_sprintf(post, sizeof(post), " (pid %u)%s%s", s->pid,
                          s->active ? "  *  " : "  -  ", s->endpoint);
+            i_fit("App  -  ", s->name, post, txt, sizeof(txt));
+        }
         popup_add_elem(app->sources, txt, NULL);
     }
     if (app->nsources > 0)

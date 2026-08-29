@@ -349,34 +349,9 @@ void ssb_thread_join(ssb_thread **t)
     *t = NULL;
 }
 
-#if !defined(_WIN32)
-
-/* Sin Media Foundation no hay codificador del sistema. Se declara aqui para que
-   el motor compile y la interfaz pueda ofrecer solo WAV. */
-const char *ssb_format_ext(ssb_format fmt)
-{
-    switch (fmt)
-    {
-    case ssb_fmt_mp3:
-        return "mp3";
-    case ssb_fmt_m4a:
-        return "m4a";
-    default:
-        return "wav";
-    }
-}
-
-ssb_res ssb_encode(const char *wav_path, const char *out_path,
-                   ssb_format fmt, uint32_t target_kbps)
-{
-    (void)wav_path;
-    (void)out_path;
-    (void)fmt;
-    (void)target_kbps;
-    return ssb_err_platform;
-}
-
-#endif
+/* En Linux el codificador vive en linux/ssb_encode_linux.c: carga LAME en
+   tiempo de ejecucion. Aqui no queda nada porque tenerlo en dos sitios era
+   justo lo que hacia que uno de los dos se quedase atras. */
 
 /* ------------------------------------------------- eleccion de fuente
 

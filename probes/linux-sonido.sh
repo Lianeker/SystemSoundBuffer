@@ -24,6 +24,14 @@ sonido_arranca()
     _dir=$1
     SSB_SND_PIDS=''
 
+    # Los ajustes del programa, dentro del directorio de trabajo. Si no, una
+    # prueba que cambia algo se lo deja puesto a la siguiente Y a la sesion de
+    # quien la ejecute. Paso: una prueba hizo `export mp3`, se guardo, y la
+    # siguiente buscaba un .wav que ya no se escribia.
+    XDG_CONFIG_HOME="$_dir/config"
+    mkdir -p "$XDG_CONFIG_HOME"
+    export XDG_CONFIG_HOME
+
     case "$SSB_SERVER" in
     pulse)
         command -v pulseaudio >/dev/null 2>&1 || { echo "falta pulseaudio"; return 1; }

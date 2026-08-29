@@ -12,14 +12,15 @@ the timeline, save it, and the recording is not interrupted.
 Two tracks recording at once, nine seconds of the timeline selected.
 
 - Lossless compression, ring buffer held on disk
-- Live waveforms; export any selected range to WAV, MP3 or AAC, aligned across
-  tracks
+- Live waveforms; export any selected range to WAV or MP3 (AAC on Windows),
+  aligned across tracks
 
 | | Windows | Linux |
 |---|---|---|
 | Capture: whole output, one application, input device | WASAPI | PulseAudio and PipeWire |
 | Playback of the selection | yes | yes |
-| MP3 / AAC export | Media Foundation | not implemented, falls back to WAV |
+| MP3 export | Media Foundation | LAME, loaded at run time if present |
+| AAC export | Media Foundation | not implemented, falls back to WAV |
 | Interface | yes | yes (GTK3) |
 
 macOS is out of scope: see [`docs/01`](docs/01-viabilidad-y-decisiones.md),
@@ -111,6 +112,7 @@ ctest --test-dir build-linux
 sh probes/linux-tono.sh 10          # virtual sink + known tone: proves capture records it
 SSB_SERVER=pipewire sh probes/linux-tono.sh   # the same, against PipeWire
 sh probes/linux-aplicacion.sh       # records one app while another plays, and proves it
+sh probes/linux-mp3.sh              # encodes a tone to MP3, decodes it back, checks it
 sh probes/linux-gui.sh --tono       # opens the interface on a real display (WSLg), with a tone
 sh probes/linux-interfaz.sh         # the whole GUI cycle under Xvfb, verifying the export
 sh probes/linux-captura.sh 25       # records the sink monitor and one application
@@ -175,10 +177,22 @@ ldd ssbgui | grep 'not found'
 Run `./ssb list` before anything else. If it prints no sources, the problem is
 the sound server, not the program.
 
+For MP3 export it also needs **libmp3lame**, which most desktops already have
+(PulseAudio pulls it in). It is loaded at run time, so the program starts and
+records without it — only MP3 falls back to WAV, and says so.
+
+```sh
+sudo apt install libmp3lame0        # Debian, Ubuntu
+sudo dnf install lame-libs          # Fedora
+sudo pacman -S lame                 # Arch
+```
+
 Build it the same way for distribution, with the SDK's web module off:
 
 ```sh
-cmake -S nappgui_src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release       -DNAPPGUI_DEMO=NO -DNAPPGUI_TESTS=NO -DNAPPGUI_WEB=NO       -DCMAKE_INSTALL_PREFIX=../install-linux-noweb
+cmake -S nappgui_src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+      -DNAPPGUI_DEMO=NO -DNAPPGUI_TESTS=NO -DNAPPGUI_WEB=NO \
+      -DCMAKE_INSTALL_PREFIX=../install-linux-noweb
 ```
 
 SSB has no WebView, and dropping that module removes webkit2gtk, javascriptcore
@@ -190,8 +204,8 @@ starting on a freshly installed system and having to add packages first.
 ```
 SystemSoundBuffer/
   ssb_core/    engine: sources, ring buffers, compression, peak map, saving. C, no GUI.
-    win/       WASAPI capture, playback, MP3/AAC encoding
-    linux/     PulseAudio capture and playback
+    win/       WASAPI capture, playback, MP3/AAC via Media Foundation
+    linux/     PulseAudio capture and playback, MP3 via LAME (dlopen)
                  (macOS out of scope: see docs/01, section 6)
   ssb_gui/     interface with NAppGUI, consumer of ssb_core
     ssbapp.c   window, controls, life cycle
@@ -239,6 +253,7 @@ was based on. Written in Spanish.
 | [30](docs/30-pipewire-y-el-gestor-de-sesion.md) | PipeWire in CI: wireplumber needs a session bus, and three symptoms were one fault |
 | [31](docs/31-grabar-una-aplicacion-y-no-la-de-al-lado.md) | Per-application capture on Linux, tested with a second app that must NOT be recorded |
 | [32](docs/32-el-informe-que-nadie-miraba.md) | The SDK reports unreleased resources on exit; it is now a gate, not a log line |
+| [33](docs/33-mp3-en-linux-y-el-nombre-que-no-cabia.md) | MP3 on Linux with LAME loaded at run time; a long device name painting over the toolbar |
 
 ## Dependencies
 
