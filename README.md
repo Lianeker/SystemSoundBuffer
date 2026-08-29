@@ -17,7 +17,7 @@ Two tracks recording at once, nine seconds of the timeline selected.
 
 | | Windows | Linux |
 |---|---|---|
-| Capture: whole output, one application, input device | WASAPI | PulseAudio |
+| Capture: whole output, one application, input device | WASAPI | PulseAudio and PipeWire |
 | Playback of the selection | yes | yes |
 | MP3 / AAC export | Media Foundation | not implemented, falls back to WAV |
 | Interface | yes | yes (GTK3) |
@@ -169,7 +169,7 @@ was based on. Written in Spanish.
 | [27](docs/27-lo-escrito-y-lo-que-ocupa.md) | The disk figure counted every block ever written, not what the ring holds |
 | [28](docs/28-linux-deja-de-ser-una-promesa.md) | A virtual sound server in CI: Linux capture and the GTK cycle, proven rather than claimed |
 | [29](docs/29-el-paquete-corto-no-es-fresco.md) | PulseAudio short packets were timestamped late, faking a gap that never happened |
-| [30](docs/30-pipewire-y-el-sink-que-no-existia.md) | PipeWire returns an unresolvable @DEFAULT_SINK@ placeholder; the harness now picks its server |
+| [30](docs/30-pipewire-y-el-gestor-de-sesion.md) | PipeWire in CI: wireplumber needs a session bus, and three symptoms were one fault |
 
 ## Dependencies
 

@@ -131,3 +131,63 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: SystemSoundBuffer
         run: sh probes/linux-interfaz.sh build
+
+  # PipeWire, en su propio trabajo y no como un paso mas: `pipewire-pulse` y
+  # `pulseaudio` son el mismo servicio y los paquetes se excluyen, asi que no
+  # pueden convivir en una misma maquina. Aqui esta la mitad del mundo que no
+  # corre PulseAudio puro. Ver docs/30.
+  pipewire:
+    name: motor e interfaz sobre PipeWire
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: SystemSoundBuffer
+
+      - name: El SDK NAppGUI
+        uses: actions/checkout@v4
+        with:
+          repository: Lianeker/nappgui-modernize
+          ref: modernize
+          path: nappgui/nappgui_src
+
+      - name: Dependencias
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build pkg-config libpulse-dev \
+            libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
+            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
+            pipewire pipewire-pulse wireplumber pulseaudio-utils xvfb dbus
+
+      - name: Que servidor hay
+        run: |
+          echo "pulseaudio: $(command -v pulseaudio || echo ---)"
+          echo "pipewire:   $(command -v pipewire || echo ---)"
+          pipewire --version || true
+          systemctl --version | head -1 || true
+
+      - name: Compilar e instalar el SDK
+        working-directory: nappgui
+        run: |
+          cmake -S nappgui_src -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DNAPPGUI_DEMO=NO -DNAPPGUI_TESTS=NO "-DCMAKE_INSTALL_PREFIX=${{ github.workspace }}/nappgui/install"
+          cmake --build build
+          cmake --install build
+
+      - name: Compilar con interfaz
+        working-directory: SystemSoundBuffer
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSSB_REQUIRE_GUI=ON "-DSSB_NAPPGUI_DIR=${{ github.workspace }}/nappgui/install/cmake"
+          cmake --build build
+
+      - name: Captura con audio real
+        working-directory: SystemSoundBuffer
+        env:
+          SSB_SERVER: pipewire
+        run: sh probes/linux-tono.sh 10 build
+
+      - name: Ciclo completo de la interfaz
+        working-directory: SystemSoundBuffer
+        env:
+          SSB_SERVER: pipewire
+        run: sh probes/linux-interfaz.sh build
