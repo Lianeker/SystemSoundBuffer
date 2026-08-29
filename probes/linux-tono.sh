@@ -49,6 +49,8 @@ sonido_tono "$TRABAJO" $((SECS + 20)) || exit 1
 WAV="$TRABAJO/buf/pista0.wav"
 if [ ! -f "$WAV" ]; then
     echo "FALLO: no se genero $WAV"
+    echo
+    sonido_diagnostico "$TRABAJO"
     exit 1
 fi
 

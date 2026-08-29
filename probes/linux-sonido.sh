@@ -115,6 +115,29 @@ PY
     return 0
 }
 
+# Que decir cuando algo falla. Sin esto hay que adivinar por que no sonaba, y
+# adivinar es lo que este arnes existe para evitar.
+sonido_diagnostico()
+{
+    _dir=$1
+    echo "--- estado del servidor ($SSB_SERVER) ---"
+    echo "  default-sink: $(pactl get-default-sink 2>&1)"
+    echo "  sinks:";        pactl list short sinks       2>&1 | sed 's/^/    /'
+    echo "  sources:";      pactl list short sources     2>&1 | sed 's/^/    /'
+    echo "  sink-inputs:";  pactl list short sink-inputs 2>&1 | sed 's/^/    /'
+    echo "    (la 2a columna es el sink; 4294967295 = sin enlazar)"
+    if [ "$SSB_SERVER" = pipewire ]; then
+        echo "  procesos:"
+        for p in pipewire wireplumber pipewire-pulse; do
+            printf '    %-15s %s\n' "$p" "$(pgrep -x $p >/dev/null && echo vivo || echo MUERTO)"
+        done
+        command -v wpctl >/dev/null 2>&1 && { echo "  wpctl status:"; wpctl status 2>&1 | head -20 | sed 's/^/    /'; }
+    fi
+    for l in "$_dir"/pulse.log "$_dir"/wp.log "$_dir"/pw.log "$_dir"/pwp.log; do
+        [ -f "$l" ] && { echo "  --- $(basename $l) ---"; tail -20 "$l" | sed 's/^/    /'; }
+    done
+}
+
 sonido_para()
 {
     [ -n "$SSB_TONO_PID" ] && kill $SSB_TONO_PID 2>/dev/null

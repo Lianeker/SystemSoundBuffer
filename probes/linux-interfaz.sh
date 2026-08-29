@@ -68,6 +68,8 @@ WAV=$(ls -1 "$SALIDA"/*.wav 2>/dev/null | head -1)
 echo
 if [ -z "$WAV" ]; then
     echo "FALLO: la interfaz no exporto ningun WAV a $SALIDA"
+    echo
+    sonido_diagnostico "$TRABAJO"
     exit 1
 fi
 
