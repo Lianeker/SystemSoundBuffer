@@ -27,7 +27,8 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y ninja-build pkg-config libpulse-dev
+          sudo apt-get install -y ninja-build pkg-config libpulse-dev \
+            pulseaudio pulseaudio-utils
 
       - name: Ninja en Windows
         if: runner.os == 'Windows'
@@ -45,13 +46,20 @@ jobs:
       - name: Tests
         run: ctest --test-dir build --output-on-failure
 
-      # El runner no tiene servidor de sonido, asi que grabar no se puede. Lo que
-      # si se comprueba es que enumerar no revienta ni se cuelga sin servidor:
-      # es el primer camino que toca el sistema de audio al arrancar.
+      # Sin servidor de sonido, que es como arranca un runner. Comprueba que
+      # enumerar no revienta ni se cuelga: es el primer camino que toca el
+      # sistema de audio, y el unico que se puede recorrer sin servidor.
       - name: Enumerar fuentes
         shell: bash
         run: |
           if [ "$RUNNER_OS" = "Windows" ]; then ./build/ssb.exe list; else ./build/ssb list; fi
+
+      # Y con servidor propio si se puede grabar. Esto es lo unico que separa
+      # "compila en Linux" de "captura en Linux"; hasta ahora la tabla del README
+      # prometia lo segundo y solo se comprobaba lo primero. Ver docs/28.
+      - name: Captura con audio real
+        if: runner.os == 'Linux'
+        run: sh probes/linux-tono.sh 10 build
 
   # La interfaz necesita el SDK, que se clona de su repositorio.
   interfaz:
@@ -84,7 +92,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ninja-build pkg-config libpulse-dev \
             libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
-            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev
+            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
+            pulseaudio pulseaudio-utils xvfb
 
       - name: Ninja en Windows
         if: runner.os == 'Windows'
@@ -114,3 +123,11 @@ jobs:
       - name: Tests
         working-directory: SystemSoundBuffer
         run: ctest --test-dir build --output-on-failure
+
+      # El ciclo entero sin pantalla y sin tarjeta: abrir la ventana, anadir la
+      # fuente, grabar, seleccionar un tramo, exportarlo, y comprobar que el WAV
+      # exportado lleva el tono que sonaba. Abrir y cerrar no prueba que grabe.
+      - name: Ciclo completo de la interfaz
+        if: runner.os == 'Linux'
+        working-directory: SystemSoundBuffer
+        run: sh probes/linux-interfaz.sh build

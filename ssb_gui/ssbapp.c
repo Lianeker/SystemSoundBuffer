@@ -1757,6 +1757,17 @@ static App *i_create(void)
 static void i_destroy(App **app)
 {
     uint32_t i;
+    /* Si queda una exportacion en marcha hay que ESPERARLA. El hilo lee las
+       pistas y la propia App, y aqui se destruyen las dos: cerrar la ventana
+       mientras se exporta un tramo largo —que es justo la operacion que tarda
+       segundos— llegaba a leer memoria ya liberada. `bthread_close` no basta,
+       solo suelta el descriptor (osbs/win/bthread.c:44). Lo delato el informe
+       de salida del SDK en Linux: "Non-dealloc Threads: 1/0". */
+    if ((*app)->job.th != NULL)
+    {
+        bthread_wait((*app)->job.th);
+        bthread_close(&(*app)->job.th);
+    }
     app_play_stop(*app);
     ssb_watch_stop();
     for (i = 0; i < (*app)->ntracks; ++i)

@@ -82,13 +82,16 @@ interface:
 ```sh
 apt install build-essential cmake ninja-build pkg-config libpulse-dev \
             libgtk-3-dev libcurl4-openssl-dev libglu1-mesa-dev \
-            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev
+            freeglut3-dev mesa-common-dev libwebkit2gtk-4.1-dev \
+            pulseaudio pulseaudio-utils xvfb
 
 cmake -S . -B build-linux -G Ninja -DCMAKE_BUILD_TYPE=Release \
       -DSSB_NAPPGUI_DIR=../nappgui/install-linux/cmake
 cmake --build build-linux
 ctest --test-dir build-linux
 
+sh probes/linux-tono.sh 10          # virtual sink + known tone: proves capture records it
+sh probes/linux-interfaz.sh         # the whole GUI cycle under Xvfb, verifying the export
 sh probes/linux-captura.sh 25       # records the sink monitor and one application
 sh probes/linux-reproduccion.sh     # plays a saved range and listens to the result
 sh probes/linux-arranque.sh 25      # starts and closes the interface, counting crashes
@@ -163,6 +166,7 @@ was based on. Written in Spanish.
 | [25](docs/25-el-limite-izquierdo-del-buffer.md) | Enlarging the ring buffer while recording did not enlarge its index |
 | [26](docs/26-el-destello-y-el-congelon.md) | Startup flash; export moved to a worker thread, and why the freeze remains |
 | [27](docs/27-lo-escrito-y-lo-que-ocupa.md) | The disk figure counted every block ever written, not what the ring holds |
+| [28](docs/28-linux-deja-de-ser-una-promesa.md) | A virtual sound server in CI: Linux capture and the GTK cycle, proven rather than claimed |
 
 ## Dependencies
 
